@@ -12,6 +12,7 @@ import java.util.List;
 
 import javax.annotation.Resource;
 
+import org.shersfy.datahub.commons.constant.JobConst.JobLogStatus;
 import org.shersfy.datahub.commons.exception.DatahubException;
 import org.shersfy.datahub.commons.meta.ColumnMeta;
 import org.shersfy.datahub.commons.meta.DBMeta;
@@ -24,6 +25,7 @@ import org.shersfy.datahub.commons.utils.JobLogUtil;
 import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
 import org.shersfy.datahub.dbexecutor.feign.DhubDbExecutorClient;
+import org.shersfy.datahub.dbexecutor.model.JobBlock;
 import org.shersfy.datahub.dbexecutor.params.config.DataSourceConfig;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.shersfy.datahub.dbexecutor.params.template.InputDbParams;
@@ -40,21 +42,25 @@ import org.springframework.stereotype.Component;
 public class JobServices {
 
     Logger LOGGER = LoggerFactory.getLogger(JobServices.class);
-    
+
     @Value("${job.block.max}")
     private int blockMax = 1;
-    
+
     @Value("${job.block.maxIndexNotExist}")
     private int blockMaxIndexNotExist = 1;
-    
+
     @Value("${job.block.records}")
     private int blcokRecords = 10000;
 
     @Resource
-    private DhubDbExecutorClient dhubDbExecutorClient;
+    private LogManager logManager;
+
+    @Resource
+    private JobBlockService jobBlockService;
     
     @Resource
-    private LogManager logManager;
+    private DhubDbExecutorClient dhubDbExecutorClient;
+
 
     /***
      * 执行分块任务
@@ -75,18 +81,18 @@ public class JobServices {
         try {
             List<InputDbParams> parts = split(allConfig.getInputParams());
             List<JobConfig> blocks    = new ArrayList<>();
-            
+
             for(InputDbParams input : parts) {
                 JobConfig blk = (JobConfig) allConfig.clone();
                 blk.setInputParams(input);
                 blocks.add(blk);
             }
-            
+
             dispatchBlocks(blocks);
-            
+
         } catch (Throwable ex) {
             LOGGER.error("", ex);
-            String err = "split job config error:\n"+ex.getMessage();
+            String err = ex.getMessage();
             err = JobLogUtil.getMsgData(Level.ERROR, allConfig.getJobId(), allConfig.getLogId(), err).toString();
             logManager.sendMsg(new MessageData(err));
         }
@@ -99,7 +105,14 @@ public class JobServices {
      */
     public void dispatchBlocks(List<JobConfig> blocks) {
         for(JobConfig blk : blocks) {
-            dhubDbExecutorClient.callExecuteJob(blk.toString());
+            JobBlock info = new JobBlock();
+            info.setJobId(blk.getJobId());
+            info.setLogId(blk.getLogId());
+            info.setConfig(blk.toString());
+            info.setStatus(JobLogStatus.Executing.index());
+            jobBlockService.insert(info);
+            // 下发配置
+            dhubDbExecutorClient.callExecuteJob(info.getId());
         }
     }
 
@@ -110,7 +123,7 @@ public class JobServices {
      * @throws DatahubException 
      * @throws CloneNotSupportedException 
      */
-    public List<InputDbParams> split(InputDbParams param) throws DatahubException, CloneNotSupportedException {
+    public List<InputDbParams> split(InputDbParams param) throws DatahubException {
 
         List<InputDbParams> blocks = new ArrayList<>();
         DataSourceConfig ds    = param.getDataSource();
@@ -123,189 +136,190 @@ public class JobServices {
         Connection conn = null;
         try {
             conn = connector.connection();
+            // 第一步，选择分块字段
+            TableMeta table = param.getTable();
+            List<ColumnMeta> columns = connector.getColumns(table, conn);
+            ColumnMeta blockColumn   = getBlockColumn(columns);
 
+            // 没有满足条件的字段，返回1块
+            if(blockColumn == null){
+                blocks.add(param);
+                return blocks;
+            }
+
+            // 第二步，计算合适的分块块数，考虑datahub节点尽量负载均衡
+            // 获取分块字段的最小值和最大值
+            long totalSize = 0;
+            double max     = 0;
+            double min     = 0;
+
+            int blockCnt = countBlockCnt(totalSize, blcokRecords, blockMax);
+            blockCnt = blockColumn.isPk()||blockColumn.isUk() ?blockCnt :blockMaxIndexNotExist;
+
+            // 不处理1个分块
+            if(blockCnt <= 1){
+                blocks.add(param);
+                return blocks;
+            }
+
+            String fullName = connector.getFullTableName(table);
+            String blockColumnName = connector.quotObject(blockColumn.getName());
+
+            // 分块最小值和最大值查询
+            StringBuffer minAndMaxSql = new StringBuffer(0);
+            minAndMaxSql.append("SELECT MIN(").append(blockColumnName).append(") miv, ");
+            minAndMaxSql.append("MAX(").append(blockColumnName).append(") mav ");
+            minAndMaxSql.append("FROM ").append(fullName);
+            // where
+            minAndMaxSql.append(param.getWhere());
+
+            GridData data = connector.executeQuery(conn, minAndMaxSql.toString());
+            List<RowData> rows = data.getRows();
+            if(!rows.isEmpty()){
+                RowData row = rows.get(0);
+                FieldData fdMin = row.getFields().get(0);
+                FieldData fdMax = row.getFields().get(1);
+                switch (blockColumn.getDataType()) {
+                    //整型
+                    case Types.TINYINT:
+                    case Types.SMALLINT:
+                    case Types.INTEGER:
+                    case Types.BIGINT:
+                    case Types.BIT:
+                        min =  Long.valueOf(String.valueOf(fdMin.getValue()));
+                        max =  Long.valueOf(String.valueOf(fdMax.getValue()));
+                        break;
+                    case Types.BOOLEAN:
+                        min = 0;
+                        max = 1;
+                        break;
+
+                        //双精度浮点型
+                    case Types.REAL:
+                    case Types.FLOAT:
+                    case Types.DOUBLE:
+                        //数字型
+                    case Types.NUMERIC:
+                    case Types.DECIMAL:
+                        if(fdMin.getValue() instanceof BigDecimal){
+                            BigDecimal minBd = (BigDecimal) fdMin.getValue();
+                            BigDecimal maxBd = (BigDecimal) fdMax.getValue();
+                            min = minBd.doubleValue();
+                            max = maxBd.doubleValue();
+                        }
+                        else{
+                            min =  (double) fdMin.getValue();
+                            max =  (double) fdMax.getValue();
+                        }
+                        break;
+
+                        //日期时间型
+                    case Types.TIMESTAMP:
+                    case Types.TIMESTAMP_WITH_TIMEZONE:
+                        String tt0 = (String) fdMin.getValue();
+                        String tt1 = (String) fdMax.getValue();
+                        min = Timestamp.valueOf(tt0).getTime();
+                        max = Timestamp.valueOf(tt1).getTime();
+                        break;
+                    case Types.DATE:
+                        Date d0 = (Date) fdMin.getValue(); 
+                        Date d1 = (Date) fdMax.getValue();;
+                        min = Date.valueOf(d0.toString()).getTime();
+                        max = Date.valueOf(d1.toString()).getTime();
+                        break;
+                    case Types.TIME:
+                    case Types.TIME_WITH_TIMEZONE:
+                        Time t0 = (Time) fdMin.getValue(); 
+                        Time t1 = (Time) fdMax.getValue();
+                        min = Time.valueOf(t0.toString()).getTime();
+                        max = Time.valueOf(t1.toString()).getTime();
+                        break;
+                    default:
+                        blocks.add(param);
+                        return blocks;
+                }
+
+            }
+
+            // 第三步，计算切点
+            // 1. 分块字段IS NOT NULL的情况
+            // 分块区间值计算(公差)
+            StringBuffer condition = new StringBuffer(0);
+            double section = (max - min) / blockCnt;
+            for (int p = 0; p < blockCnt; p++) {
+
+                double start = min   + section * p;
+                double end   = start + section;
+
+                List<Object> conditionArgs = new ArrayList<>();
+                TablePartition part = new TablePartition();
+                condition.setLength(0);
+
+                if(max == min){
+                    condition.append(blockColumnName).append(" = ? ");
+                }
+                // 第一块
+                else if (p == 0) {
+                    condition.append(blockColumnName).append(" >= ?").append(" AND ");
+                    condition.append(blockColumnName).append(" < ?");
+                    start = min;
+                } 
+                // 分区字段是非字符串类型, 最后一块
+                else if (p == blockCnt - 1) {
+                    condition.append(blockColumnName).append(" >= ?").append(" AND ");
+                    condition.append(blockColumnName).append(" <= ?");
+                    end = max;
+                }
+                // 分区字段是非字符串类型, 中间块
+                else {
+                    condition.append(blockColumnName).append(" >= ?").append(" AND ");
+                    condition.append(blockColumnName).append(" < ?");
+                }
+
+                conditionArgs.add(parseToObject(start, blockColumn));
+                if(max != min){
+                    conditionArgs.add(parseToObject(end, blockColumn));
+                }
+
+                part.setIndex(p);
+                part.setCondition(condition.toString());
+                part.setConditionArgs(conditionArgs);
+                part.setPartColumn(blockColumn);
+
+                InputDbParams clone = (InputDbParams) param.clone();
+                clone.setBlock(part);
+
+                blocks.add(clone);
+                if(max == min){
+                    break;
+                }
+            }
+
+
+            // 2. 分块字段IS NULL的情况
+            condition.setLength(0);
+
+            TablePartition part = new TablePartition();
+            condition.append(blockColumnName).append(" IS NULL");
+            part.setIndex(-1);
+            part.setCondition(condition.toString());
+            part.setPartColumn(blockColumn);
+
+            InputDbParams clone = (InputDbParams) param.clone();
+            clone.setBlock(part);
+            blocks.add(clone);
+            
+        } catch (Throwable ex) {
+            throw DatahubException.throwDatahubException("split job config error:", ex);
         } finally {
             if(connector!=null) {
                 connector.close(conn);
             }
         }
 
-        // 第一步，选择分块字段
-        TableMeta table = param.getTable();
-        List<ColumnMeta> columns = connector.getColumns(table, conn);
-        ColumnMeta blockColumn   = getBlockColumn(columns);
-
-        // 没有满足条件的字段，返回1块
-        if(blockColumn == null){
-            blocks.add(param);
-            return blocks;
-        }
-
-        // 第二步，计算合适的分块块数，考虑datahub节点尽量负载均衡
-        // 获取分块字段的最小值和最大值
-        long totalSize = 0;
-        double max     = 0;
-        double min     = 0;
-        
-        int blockCnt = countBlockCnt(totalSize, blcokRecords, blockMax);
-        blockCnt = blockColumn.isPk()||blockColumn.isUk() ?blockCnt :blockMaxIndexNotExist;
-        
-        // 不处理1个分块
-        if(blockCnt <= 1){
-            blocks.add(param);
-            return blocks;
-        }
-
-        String fullName = connector.getFullTableName(table);
-        String blockColumnName = connector.quotObject(blockColumn.getName());
-
-        // 分块最小值和最大值查询
-        StringBuffer minAndMaxSql = new StringBuffer(0);
-        minAndMaxSql.append("SELECT MIN(").append(blockColumnName).append(") miv, ");
-        minAndMaxSql.append("MAX(").append(blockColumnName).append(") mav ");
-        minAndMaxSql.append("FROM ").append(fullName);
-        // where
-        minAndMaxSql.append(param.getWhere());
-
-        GridData data = connector.executeQuery(conn, minAndMaxSql.toString());
-        List<RowData> rows = data.getRows();
-        if(!rows.isEmpty()){
-            RowData row = rows.get(0);
-            FieldData fdMin = row.getFields().get(0);
-            FieldData fdMax = row.getFields().get(1);
-            switch (blockColumn.getDataType()) {
-                //整型
-                case Types.TINYINT:
-                case Types.SMALLINT:
-                case Types.INTEGER:
-                case Types.BIGINT:
-                case Types.BIT:
-                    min =  Long.valueOf(String.valueOf(fdMin.getValue()));
-                    max =  Long.valueOf(String.valueOf(fdMax.getValue()));
-                    break;
-                case Types.BOOLEAN:
-                    min = 0;
-                    max = 1;
-                    break;
-
-                    //双精度浮点型
-                case Types.REAL:
-                case Types.FLOAT:
-                case Types.DOUBLE:
-                    //数字型
-                case Types.NUMERIC:
-                case Types.DECIMAL:
-                    if(fdMin.getValue() instanceof BigDecimal){
-                        BigDecimal minBd = (BigDecimal) fdMin.getValue();
-                        BigDecimal maxBd = (BigDecimal) fdMax.getValue();
-                        min = minBd.doubleValue();
-                        max = maxBd.doubleValue();
-                    }
-                    else{
-                        min =  (double) fdMin.getValue();
-                        max =  (double) fdMax.getValue();
-                    }
-                    break;
-
-                    //日期时间型
-                case Types.TIMESTAMP:
-                case Types.TIMESTAMP_WITH_TIMEZONE:
-                    String tt0 = (String) fdMin.getValue();
-                    String tt1 = (String) fdMax.getValue();
-                    min = Timestamp.valueOf(tt0).getTime();
-                    max = Timestamp.valueOf(tt1).getTime();
-                    break;
-                case Types.DATE:
-                    Date d0 = (Date) fdMin.getValue(); 
-                    Date d1 = (Date) fdMax.getValue();;
-                    min = Date.valueOf(d0.toString()).getTime();
-                    max = Date.valueOf(d1.toString()).getTime();
-                    break;
-                case Types.TIME:
-                case Types.TIME_WITH_TIMEZONE:
-                    Time t0 = (Time) fdMin.getValue(); 
-                    Time t1 = (Time) fdMax.getValue();
-                    min = Time.valueOf(t0.toString()).getTime();
-                    max = Time.valueOf(t1.toString()).getTime();
-                    break;
-                default:
-                    blocks.add(param);
-                    return blocks;
-            }
-
-        }
-
-        // 第三步，计算切点
-        // 1. 分块字段IS NOT NULL的情况
-        // 分块区间值计算(公差)
-        StringBuffer condition = new StringBuffer(0);
-        double section = (max - min) / blockCnt;
-        for (int p = 0; p < blockCnt; p++) {
-
-            double start = min   + section * p;
-            double end   = start + section;
-
-            List<Object> conditionArgs = new ArrayList<>();
-            TablePartition part = new TablePartition();
-            condition.setLength(0);
-
-            if(max == min){
-                condition.append(blockColumnName).append(" = ? ");
-            }
-            // 第一块
-            else if (p == 0) {
-                condition.append(blockColumnName).append(" >= ?").append(" AND ");
-                condition.append(blockColumnName).append(" < ?");
-                start = min;
-            } 
-            // 分区字段是非字符串类型, 最后一块
-            else if (p == blockCnt - 1) {
-                condition.append(blockColumnName).append(" >= ?").append(" AND ");
-                condition.append(blockColumnName).append(" <= ?");
-                end = max;
-            }
-            // 分区字段是非字符串类型, 中间块
-            else {
-                condition.append(blockColumnName).append(" >= ?").append(" AND ");
-                condition.append(blockColumnName).append(" < ?");
-            }
-
-            conditionArgs.add(parseToObject(start, blockColumn));
-            if(max != min){
-                conditionArgs.add(parseToObject(end, blockColumn));
-            }
-
-            part.setIndex(p);
-            part.setCondition(condition.toString());
-            part.setConditionArgs(conditionArgs);
-            part.setPartColumn(blockColumn);
-            
-            InputDbParams clone = (InputDbParams) param.clone();
-            clone.setBlock(part);
-            
-            blocks.add(clone);
-            if(max == min){
-                break;
-            }
-        }
-
-
-        // 2. 分块字段IS NULL的情况
-        condition.setLength(0);
-        
-        TablePartition part = new TablePartition();
-        condition.append(blockColumnName).append(" IS NULL");
-        part.setIndex(-1);
-        part.setCondition(condition.toString());
-        part.setPartColumn(blockColumn);
-        
-        InputDbParams clone = (InputDbParams) param.clone();
-        clone.setBlock(part);
-        blocks.add(clone);
-
         return blocks;
     }
-    
+
     /**计算分块数**/
     public int countBlockCnt(long totalSize, int minSizePerBlock, int maxBlockSize){
         long blockSize = 1;
@@ -366,7 +380,7 @@ public class JobServices {
 
         return blockColumn;
     }
-    
+
     /**
      * 转为object对象
      * 
@@ -381,41 +395,41 @@ public class JobServices {
         }
         int type = partColumn.getDataType();
         switch (type) {
-        case Types.TINYINT:
-        case Types.SMALLINT:
-        case Types.INTEGER:
-        case Types.BIGINT:
-        case Types.BIT:
-            obj = (long)value;
-            break;
-        case Types.BOOLEAN:
-            obj = Boolean.valueOf(((int)value)!=0);
-            break;
+            case Types.TINYINT:
+            case Types.SMALLINT:
+            case Types.INTEGER:
+            case Types.BIGINT:
+            case Types.BIT:
+                obj = (long)value;
+                break;
+            case Types.BOOLEAN:
+                obj = Boolean.valueOf(((int)value)!=0);
+                break;
 
-            //双精度浮点型
-        case Types.REAL:
-        case Types.FLOAT:
-        case Types.DOUBLE:
-            //数字型
-        case Types.NUMERIC:
-        case Types.DECIMAL:
-            obj = value;
-            break;
+                //双精度浮点型
+            case Types.REAL:
+            case Types.FLOAT:
+            case Types.DOUBLE:
+                //数字型
+            case Types.NUMERIC:
+            case Types.DECIMAL:
+                obj = value;
+                break;
 
-            //日期时间型
-        case Types.TIMESTAMP:
-        case Types.TIMESTAMP_WITH_TIMEZONE:
-            obj = new Timestamp((long)value);
-            break;
-        case Types.DATE:
-            obj = new Date((long)value);
-            break;
-        case Types.TIME:
-        case Types.TIME_WITH_TIMEZONE:
-            obj = new Time((long)value);
-            break;
-        default:
-            break;
+                //日期时间型
+            case Types.TIMESTAMP:
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                obj = new Timestamp((long)value);
+                break;
+            case Types.DATE:
+                obj = new Date((long)value);
+                break;
+            case Types.TIME:
+            case Types.TIME_WITH_TIMEZONE:
+                obj = new Time((long)value);
+                break;
+            default:
+                break;
         }
 
         return obj;
