@@ -12,6 +12,12 @@ spring:
       jdbc-url: jdbc:mysql://127.0.0.1:3306/datahub_job_manager?useUnicode=true&characterEncoding=utf8&useSSL=false
       username: '{cipher}6d7a6184efc2a28a9c7e7b31ca462a8099b3a637607fd68262cb44dc99388f69'
       password: '{cipher}1033b1da3eee0e66e254fd8560df4d81f2f69b8d75cce4befb3d756d0d4ec088'
+# jobs
+job:
+  block:
+    max: 10 # 最大块数 
+    maxIndexNotExist: 1 # 没有索引时最大块数
+    records: 10000 # 每块记录数
 # hystrix 必须加否则无效(默认false)
 feign: 
   hystrix:
