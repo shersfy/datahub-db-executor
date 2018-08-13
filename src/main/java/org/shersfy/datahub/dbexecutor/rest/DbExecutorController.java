@@ -31,24 +31,35 @@ public class DbExecutorController extends BaseController{
     public Object index() {
         return "Welcom database executor application "+ version;
     }
-
-
-    @GetMapping("/job/config")
-    public Result jobConfig(Long jobId, Long logId, String config) {
-        
-        JobConfig cfg = JSON.parseObject(config, JobConfig.class);
-        cfg.setJobId(jobId);
-        cfg.setLogId(logId);
-        
-        jobServices.execute(cfg);
-        
-        return new Result(SUCESS, "received successful");
-    }
-
+    
+    
     @GetMapping("/job/check")
     public Result checkJobConfig(@RequestParam("config")String config) {
         LOGGER.info("config={}", config);
         return new Result(SUCESS, "received successful");
     }
+
+    @GetMapping("/job/config")
+    public Result configJob(Long jobId, Long logId, String config) {
+        
+        JobConfig cfg = JSON.parseObject(config, JobConfig.class);
+        cfg.setJobId(jobId);
+        cfg.setLogId(logId);
+        
+        jobServices.splitJobConfig(cfg);
+        
+        return new Result(SUCESS, "received successful");
+    }
+    
+    @GetMapping("/job/execute")
+    public Result executeJob(String config) {
+        
+        JobConfig block = JSON.parseObject(config, JobConfig.class);
+        jobServices.execute(block);
+        
+        return new Result(SUCESS, "received successful");
+    }
+
+   
 
 }

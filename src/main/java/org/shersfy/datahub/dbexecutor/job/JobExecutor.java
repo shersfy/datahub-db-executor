@@ -1,5 +1,12 @@
 package org.shersfy.datahub.dbexecutor.job;
 
-public class JobExecutor {
+
+public class JobExecutor implements Runnable{
+
+    @Override
+    public void run() {
+        
+        
+    }
     
 }

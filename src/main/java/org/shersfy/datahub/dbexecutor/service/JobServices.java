@@ -1,5 +1,11 @@
 package org.shersfy.datahub.dbexecutor.service;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.annotation.Resource;
+
+import org.shersfy.datahub.dbexecutor.feign.DhubDbExecutorClient;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,16 +17,41 @@ public class JobServices {
     
     Logger LOGGER = LoggerFactory.getLogger(JobServices.class);
     
+    @Resource
+    private DhubDbExecutorClient dhubDbExecutorClient;
+    
+    /***
+     * 执行分块任务
+     * @param blockConfig
+     */
     @Async
-    public void execute(JobConfig config) {
-        for(int i=0; i<30; i++) {
-            LOGGER.info("{}", config);
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+    public void execute(JobConfig blockConfig) {
+        LOGGER.info("block={}", blockConfig.getInputParams());
+    }
+    
+    /**
+     * 拆分任务为若干块子任务
+     * @param config 任务配置
+     */
+    @Async
+    public void splitJobConfig(JobConfig allConfig) {
+        List<JobConfig> blocks = new ArrayList<>();
+        
+        dispatchBlocks(blocks);
+    }
+    
+    /**
+     * 分发任务
+     * @param blocks
+     */
+    public void dispatchBlocks(List<JobConfig> blocks) {
+        for(JobConfig blk : blocks) {
+            dhubDbExecutorClient.callExecuteJob(blk.toString());
         }
+    }
+    
+    public void split() {
+        
     }
 
 }
