@@ -61,8 +61,8 @@ public class JobServices {
      * @param blockConfig
      */
     @Async
-    public void execute(JobConfig blockConfig) {
-        LOGGER.info("block={}", blockConfig.getInputParams());
+    public void execute(Long blockId) {
+        LOGGER.info("block={}", blockId);
     }
 
     /**

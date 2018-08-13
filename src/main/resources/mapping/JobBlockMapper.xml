@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="org.shersfy.datahub.dbexecutor.mapper.JobBlockMapper">
+	<resultMap id="BaseResultMap" type="org.shersfy.datahub.dbexecutor.model.JobBlock">
+		<id column="id" property="id" jdbcType="BIGINT" />
+		<result column="job_id" property="jobId" jdbcType="BIGINT" />
+		<result column="log_id" property="logId" jdbcType="BIGINT" />
+		<result column="status" property="status" jdbcType="INTEGER" />
+		<result column="config" property="config" jdbcType="LONGVARCHAR" />
+		<result column="create_time" property="createTime" jdbcType="TIMESTAMP" />
+		<result column="update_time" property="updateTime" jdbcType="TIMESTAMP" />
+	</resultMap>
+	<sql id="Base_Column_List">
+		id, job_id, log_id, status, config, create_time, update_time
+	</sql>
+	<select id="findById" resultMap="BaseResultMap" parameterType="java.lang.Long">
+		select
+		<include refid="Base_Column_List" />
+		from job_block
+		where id = #{id,jdbcType=BIGINT}
+	</select>
+	<delete id="deleteById" parameterType="java.lang.Long">
+		delete from job_block
+		where id = #{id,jdbcType=BIGINT}
+	</delete>
+	<update id="updateById" parameterType="org.shersfy.datahub.dbexecutor.model.JobBlock">
+		update job_block
+		<set>
+			<if test="jobId != null">
+				job_id = #{jobId,jdbcType=BIGINT},
+			</if>
+
+			<if test="logId != null">
+				log_id = #{logId,jdbcType=BIGINT},
+			</if>
+
+			<if test="status != null">
+				status = #{status,jdbcType=INTEGER},
+			</if>
+
+			<if test="createTime != null">
+				create_time = #{createTime,jdbcType=TIMESTAMP},
+			</if>
+
+			<if test="updateTime != null">
+				update_time = #{updateTime,jdbcType=TIMESTAMP},
+			</if>
+
+			<if test="config != null">
+				config = #{config,jdbcType=LONGVARCHAR},
+			</if>
+
+		</set>
+		where id = #{id,jdbcType=BIGINT}
+	</update>
+	<insert id="insert" parameterType="JobBlock" keyProperty="id" useGeneratedKeys="true">
+		insert into job_block (id, job_id, log_id,
+		status, create_time, update_time,
+		config)
+		values (#{id,jdbcType=BIGINT}, #{jobId,jdbcType=BIGINT},
+		#{logId,jdbcType=BIGINT},
+		#{status,jdbcType=INTEGER}, #{createTime,jdbcType=TIMESTAMP}, #{updateTime,jdbcType=TIMESTAMP},
+		#{config,jdbcType=LONGVARCHAR})
+	</insert>
+	<select id="findList" resultMap="BaseResultMap" parameterType="JobBlock">
+		select
+		<include refid="Base_Column_List" />
+		from job_block
+		<include refid="condition" />
+		<choose>
+			<when test="(sort !=null and sort !='') and (order !=null and order !='')">
+				order by ${sort} ${order}
+			</when>
+			<otherwise>order by id asc</otherwise>
+		</choose>
+		<if test="startIndex !=null  and pageSize !=null">limit #{startIndex}, #{pageSize}</if>
+	</select>
+	<select id="findListCount" resultType="Long"
+		parameterType="JobBlock">
+		select count(1) from job_block
+		<include refid="condition" />
+	</select>
+	<sql id="condition">
+		<where>
+			<if test="jobId != null">and job_id = #{jobId, jdbcType=BIGINT}</if>
+			<if test="logId != null">and log_id = #{logId, jdbcType=BIGINT}</if>
+			<if test="status != null">and status = #{status, jdbcType=INTEGER}</if>
+		</where>
+	</sql>
+</mapper>
