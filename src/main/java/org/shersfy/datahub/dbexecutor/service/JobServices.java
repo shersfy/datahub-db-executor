@@ -125,10 +125,13 @@ public class JobServices {
      */
     public List<InputDbParams> split(InputDbParams param) throws DatahubException {
 
+        param.setWhere(param.getWhere()==null?"":param.getWhere());
+        
         List<InputDbParams> blocks = new ArrayList<>();
         DataSourceConfig ds    = param.getDataSource();
 
         DBMeta dbMeta = DbConnectorInterface.getMetaByUrl(ds.getUrl());
+        dbMeta.setCode(param.getDataSource().getDbType());
         dbMeta.setUserName(ds.getUsername());
         dbMeta.setPassword(ds.getPassword());
 
@@ -149,7 +152,9 @@ public class JobServices {
 
             // 第二步，计算合适的分块块数，考虑datahub节点尽量负载均衡
             // 获取分块字段的最小值和最大值
-            long totalSize = 0;
+            String countSql = String.format("SELECT COUNT(1) FROM %s %s", connector.getFullTableName(table), param.getWhere());
+            long totalSize  = connector.queryCount(countSql, conn);
+            
             double max     = 0;
             double min     = 0;
 
