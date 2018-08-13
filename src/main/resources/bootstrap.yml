@@ -1,8 +1,13 @@
-server:
-  port: 8082
 spring:
   application:
     name: datahub-db-executor
+  main:
+    banner-mode: 'off'
+  cloud:
+    config: # config server
+      uri: http://localhost:8888
+      label: master
+      profile: dev
 # eureka server
 eureka:
   instance:
@@ -11,12 +16,3 @@ eureka:
     enabled: true
     service-url:
       defaultZone: http://localhost:8761/eureka/
-# logging
-logging:
-  file: logs/${spring.application.name}.log
-  file.max-size: 100MB
-  level:
-    root: info
-  pattern:
-    dateformat: yyyy-MM-dd HH:mm:ss.SSS
-    level: '%5p'
