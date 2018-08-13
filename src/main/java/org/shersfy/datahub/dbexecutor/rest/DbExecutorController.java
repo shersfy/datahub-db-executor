@@ -3,7 +3,7 @@ package org.shersfy.datahub.dbexecutor.rest;
 import javax.annotation.Resource;
 
 import org.shersfy.datahub.commons.beans.Result;
-import org.shersfy.datahub.dbexecutor.params.template.JobConfig;
+import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.shersfy.datahub.dbexecutor.service.JobServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

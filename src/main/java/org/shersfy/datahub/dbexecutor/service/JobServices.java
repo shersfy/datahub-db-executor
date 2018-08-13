@@ -1,6 +1,6 @@
 package org.shersfy.datahub.dbexecutor.service;
 
-import org.shersfy.datahub.dbexecutor.params.template.JobConfig;
+import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;

@@ -1,18 +1,17 @@
-package org.shersfy.datahub.dbexecutor.params.template;
+package org.shersfy.datahub.dbexecutor.params.config;
 
 import org.shersfy.datahub.commons.meta.BaseMeta;
 
 public class DataSourceConfig extends BaseMeta{
 
+    /**数据库类型**/
     private String dbType;
-    
+    /**JDBC连接url**/
     private String url;
-    
+    /**JDBC连接用户名**/
     private String username;
-    
+    /**JDBC连接密码(密文)**/
     private String password;
-    
-    private String sql;
 
     public String getDbType() {
         return dbType;
@@ -46,12 +45,4 @@ public class DataSourceConfig extends BaseMeta{
         this.password = password;
     }
 
-    public String getSql() {
-        return sql;
-    }
-
-    public void setSql(String sql) {
-        this.sql = sql;
-    }
-    
 }
