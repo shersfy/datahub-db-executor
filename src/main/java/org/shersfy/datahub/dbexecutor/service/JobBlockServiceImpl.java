@@ -1,7 +1,10 @@
 package org.shersfy.datahub.dbexecutor.service;
 
+import java.util.List;
+
 import javax.annotation.Resource;
 
+import org.shersfy.datahub.commons.constant.JobConst.JobLogStatus;
 import org.shersfy.datahub.dbexecutor.mapper.BaseMapper;
 import org.shersfy.datahub.dbexecutor.mapper.JobBlockMapper;
 import org.shersfy.datahub.dbexecutor.model.JobBlock;
@@ -49,6 +52,29 @@ public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long>
         return mapper.deleteBlocks(block);
     }
 
+    @Override
+    public boolean isFinished(Long jobId, Long logId) {
+
+        JobBlock where = new JobBlock();
+        where.setJobId(jobId);
+        where.setLogId(logId);
+
+        List<JobBlock> blocks = findList(where);
+        return isFinished(blocks);
+    }
     
+    @Override
+    public boolean isFinished(List<JobBlock> blocks) {
+        if(blocks==null||blocks.isEmpty()) {
+            return true;
+        }
+        for(JobBlock po :blocks) {
+            if(po.getStatus()!=JobLogStatus.Successful.index()) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
     
 }

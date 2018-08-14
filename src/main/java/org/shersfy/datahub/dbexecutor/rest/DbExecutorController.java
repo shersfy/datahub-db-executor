@@ -51,7 +51,7 @@ public class DbExecutorController extends BaseController{
         cfg.setJobId(jobId);
         cfg.setLogId(logId);
         
-        jobServices.splitJobConfig(cfg);
+        jobServices.split(cfg);
         
         return new Result(SUCESS, "received successful");
     }

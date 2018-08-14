@@ -28,6 +28,15 @@ public class JobConfig extends BaseMeta{
     
     /**目标Hive参数**/
     private OutputHiveParams outputHiveParams;
+    
+    @Override
+    public boolean equals(Object obj) {
+        if(!(obj instanceof JobConfig)) {
+            return false;
+        }
+        
+        return this.toString().equals(obj.toString());
+    }
 
     public Long getJobId() {
         return jobId;
@@ -84,5 +93,6 @@ public class JobConfig extends BaseMeta{
     public void setOutputHiveParams(OutputHiveParams outputHiveParams) {
         this.outputHiveParams = outputHiveParams;
     }
+
     
 }

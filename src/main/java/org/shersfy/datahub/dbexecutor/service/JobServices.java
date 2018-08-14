@@ -43,6 +43,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.alibaba.fastjson.JSON;
@@ -139,11 +140,12 @@ public class JobServices {
      * @param config 任务配置
      */
     @Async
-    public void splitJobConfig(JobConfig allConfig) {
+    @Transactional(propagation=Propagation.NOT_SUPPORTED)
+    public void split(JobConfig allConfig) {
 
         List<JobConfig> blocks = new ArrayList<>();
         try {
-            List<InputDbParams> parts = split(allConfig.getInputParams());
+            List<InputDbParams> parts = splitParams(allConfig.getInputParams());
 
             for(InputDbParams input : parts) {
                 JobConfig blk = (JobConfig) allConfig.clone();
@@ -158,20 +160,28 @@ public class JobServices {
             logManager.sendMsg(new MessageData(err));
         }
 
-        // 需要处理事务，故不放在try中
-        dispatchBlocks(blocks);
+        // 历史残留数据处理
+        JobBlock where = new JobBlock();
+        where.setJobId(allConfig.getJobId());
+        where.setLogId(allConfig.getJobId());
+        
+        List<JobBlock> list = jobBlockService.findList(where);
+        if(!list.isEmpty() && jobBlockService.isFinished(list)) {
+            // 清除历史未清除的全部执行完毕的切片
+            jobBlockService.deleteBlocks(list.get(0));
+        }
+        
+        // 不需要事务支持，因为一旦删除操作事务没提交，分发出去的切片在数据库中还能查到
+        dispatch(blocks, 0);
 
     }
 
     /**
      * 分发任务
      * @param blocks
+     * @param retry 重试次数
      */
-    public void dispatchBlocks(List<JobConfig> blocks) {
-        dispatchBlocks(blocks, 0);
-    }
-    
-    public void dispatchBlocks(List<JobConfig> blocks, int retry) {
+    public void dispatch(List<JobConfig> blocks, int retry) {
         List<JobConfig> errors = new ArrayList<>();
         for(JobConfig block : blocks) {
             // 下发配置
@@ -192,7 +202,7 @@ public class JobServices {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
             }
-            dispatchBlocks(errors, retry+1);
+            dispatch(errors, retry+1);
         }
     }
 
@@ -203,7 +213,7 @@ public class JobServices {
      * @throws DatahubException 
      * @throws CloneNotSupportedException 
      */
-    public List<InputDbParams> split(InputDbParams param) throws DatahubException {
+    public List<InputDbParams> splitParams(InputDbParams param) throws DatahubException {
 
         param.setWhere(param.getWhere()==null?"":param.getWhere());
         
@@ -406,7 +416,7 @@ public class JobServices {
     }
 
     /**计算分块数**/
-    public int countBlockCnt(long totalSize, int minSizePerBlock, int maxBlockSize){
+    private int countBlockCnt(long totalSize, int minSizePerBlock, int maxBlockSize){
         long blockSize = 1;
         if(totalSize<=minSizePerBlock){
             return 1;
