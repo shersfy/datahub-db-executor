@@ -41,11 +41,11 @@ public class JobBlockTask implements Callable<JobBlock>{
         service.updateByPk(udp);
         LOGGER.info("jobId={}, logId={}, blockId={}, finished", jobId, logId, blkId);
 
-        service.isFinished(jobId, logId);
-        
-        int cnt = service.deleteBlocks(block);
-        LOGGER.info("jobId={}, logId={}, deleted blocks size={}, all blocks finished", 
-            jobId, logId, cnt);
+        if(service.isFinished(jobId, logId)) {
+            int cnt = service.deleteBlocks(block);
+            LOGGER.info("jobId={}, logId={}, deleted blocks size={}, all blocks finished", 
+                jobId, logId, cnt);
+        }
         
         return block;
     }
