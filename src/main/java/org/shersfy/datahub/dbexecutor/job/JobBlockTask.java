@@ -44,7 +44,7 @@ public class JobBlockTask implements Callable<JobBlock>{
                 else if(blkId%2==0) {
                     sleep = 6;
                 }
-                Thread.sleep(sleep);
+                Thread.sleep(sleep*1000);
             } catch (InterruptedException e) {
                 // TODO Auto-generated catch block
                 e.printStackTrace();
