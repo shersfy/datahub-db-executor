@@ -7,12 +7,13 @@
 		<result column="job_id" property="jobId" jdbcType="BIGINT" />
 		<result column="log_id" property="logId" jdbcType="BIGINT" />
 		<result column="status" property="status" jdbcType="INTEGER" />
+		<result column="service" property="service" jdbcType="VARCHAR" />
 		<result column="config" property="config" jdbcType="LONGVARCHAR" />
 		<result column="create_time" property="createTime" jdbcType="TIMESTAMP" />
 		<result column="update_time" property="updateTime" jdbcType="TIMESTAMP" />
 	</resultMap>
 	<sql id="Base_Column_List">
-		id, job_id, log_id, status, config, create_time, update_time
+		id, job_id, log_id, status, service, config, create_time, update_time
 	</sql>
 	<select id="findByPk" resultMap="BaseResultMap" parameterType="map">
 		select
@@ -37,7 +38,15 @@
 			<if test="status != null">
 				status = #{status,jdbcType=INTEGER},
 			</if>
+			
+			<if test="service != null">
+				service = #{service,jdbcType=VARCHAR},
+			</if>
 
+			<if test="config != null">
+				config = #{config,jdbcType=LONGVARCHAR},
+			</if>
+			
 			<if test="createTime != null">
 				create_time = #{createTime,jdbcType=TIMESTAMP},
 			</if>
@@ -45,11 +54,6 @@
 			<if test="updateTime != null">
 				update_time = #{updateTime,jdbcType=TIMESTAMP},
 			</if>
-
-			<if test="config != null">
-				config = #{config,jdbcType=LONGVARCHAR},
-			</if>
-
 		</set>
 		where id = #{id,jdbcType=BIGINT} 
 		and job_id = #{jobId,jdbcType=BIGINT}
@@ -57,12 +61,12 @@
 	</update>
 	<insert id="insert" parameterType="JobBlock" keyProperty="id" useGeneratedKeys="true">
 		insert into job_block (id, job_id, log_id,
-		status, create_time, update_time,
+		status, service, create_time, update_time,
 		config)
 		values (#{id,jdbcType=BIGINT}, #{jobId,jdbcType=BIGINT},
-		#{logId,jdbcType=BIGINT},
-		#{status,jdbcType=INTEGER}, #{createTime,jdbcType=TIMESTAMP}, #{updateTime,jdbcType=TIMESTAMP},
-		#{config,jdbcType=LONGVARCHAR})
+		#{logId,jdbcType=BIGINT}, #{status,jdbcType=INTEGER},
+		#{service,jdbcType=VARCHAR}, #{config,jdbcType=LONGVARCHAR},
+		#{createTime,jdbcType=TIMESTAMP}, #{updateTime,jdbcType=TIMESTAMP})
 	</insert>
 	<select id="findList" resultMap="BaseResultMap" parameterType="JobBlock">
 		select
@@ -87,6 +91,7 @@
 			<if test="jobId != null">and job_id = #{jobId, jdbcType=BIGINT}</if>
 			<if test="logId != null">and log_id = #{logId, jdbcType=BIGINT}</if>
 			<if test="status != null">and status = #{status, jdbcType=INTEGER}</if>
+			<if test="service != null">and service like concat("%", #{service},"%")</if>
 		</where>
 	</sql>
 </mapper>

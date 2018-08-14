@@ -15,6 +15,9 @@ public class JobBlock extends BaseEntity {
     /** 结果状态(1：执行中(默认)，2：执行成功，3：执行失败) **/
     private Integer status;
 
+    /** 服务标识 **/
+    private String service;
+    
     /** 配置参数 **/
     private String config;
 
@@ -48,5 +51,13 @@ public class JobBlock extends BaseEntity {
 
     public void setConfig(String config) {
         this.config = config;
+    }
+
+    public String getService() {
+        return service;
+    }
+
+    public void setService(String service) {
+        this.service = service;
     }
 }

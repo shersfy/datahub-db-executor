@@ -21,6 +21,7 @@ CREATE TABLE `job_block` (
   `job_id` bigint(20) NOT NULL COMMENT '任务ID',
   `log_id` bigint(20) NOT NULL COMMENT '任务日志ID',
   `status` int(1) NOT NULL DEFAULT '1' COMMENT '结果状态(1：执行中(默认)，2：执行成功，3：执行失败)',
+  `service` varchar(255) COMMENT '服务标识',
   `config` longtext COMMENT '配置参数',
   `create_time` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '创建时间',
   `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',

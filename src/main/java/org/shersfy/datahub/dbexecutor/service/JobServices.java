@@ -27,6 +27,7 @@ import org.shersfy.datahub.commons.meta.MessageData;
 import org.shersfy.datahub.commons.meta.RowData;
 import org.shersfy.datahub.commons.meta.TableMeta;
 import org.shersfy.datahub.commons.utils.JobLogUtil;
+import org.shersfy.datahub.commons.utils.LocalHostUtil;
 import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
 import org.shersfy.datahub.dbexecutor.feign.DhubDbExecutorClient;
@@ -53,6 +54,8 @@ import com.alibaba.fastjson.JSON;
 @Component
 public class JobServices {
 
+    public static String SERVICE_NAME = LocalHostUtil.IP;
+    
     Logger LOGGER = LoggerFactory.getLogger(JobServices.class);
 
     @Value("${job.block.max}")
@@ -101,6 +104,7 @@ public class JobServices {
         info.setId(Long.valueOf(block.getInputParams().getBlock().getIndex()));
         info.setJobId(block.getJobId());
         info.setLogId(block.getLogId());
+        info.setService(SERVICE_NAME);
         info.setConfig(block.toString());
         info.setStatus(JobLogStatus.Executing.index());
         
