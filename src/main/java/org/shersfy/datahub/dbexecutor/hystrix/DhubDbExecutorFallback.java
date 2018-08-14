@@ -17,8 +17,8 @@ public class DhubDbExecutorFallback implements DhubDbExecutorClient {
     protected Logger LOGGER = LoggerFactory.getLogger(getClass());
 
     @Override
-    public String callExecuteJob(Long blockId) {
-        LOGGER.error("check params error, blockId={}", blockId);
+    public String callExecuteJob(String block) {
+        LOGGER.error("check params error, block={}", block);
         return new Result(FAIL, "server error: "+serviceId).toString();
     }
 

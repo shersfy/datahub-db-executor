@@ -14,27 +14,26 @@
 	<sql id="Base_Column_List">
 		id, job_id, log_id, status, config, create_time, update_time
 	</sql>
-	<select id="findById" resultMap="BaseResultMap" parameterType="java.lang.Long">
+	<select id="findByPk" resultMap="BaseResultMap" parameterType="map">
 		select
 		<include refid="Base_Column_List" />
 		from job_block
-		where id = #{id,jdbcType=BIGINT}
+		where id = #{id,jdbcType=BIGINT} 
+		and job_id = #{jobId, jdbcType=BIGINT} 
+		and log_id = #{logId, jdbcType=BIGINT}
 	</select>
 	<delete id="deleteById" parameterType="java.lang.Long">
 		delete from job_block
 		where id = #{id,jdbcType=BIGINT}
 	</delete>
-	<update id="updateById" parameterType="org.shersfy.datahub.dbexecutor.model.JobBlock">
+	<delete id="deleteBlocks" parameterType="map">
+		delete from job_block
+		where job_id = #{jobId, jdbcType=BIGINT}
+		and log_id = #{logId, jdbcType=BIGINT}
+	</delete>
+	<update id="updateByPk" parameterType="org.shersfy.datahub.dbexecutor.model.JobBlock">
 		update job_block
 		<set>
-			<if test="jobId != null">
-				job_id = #{jobId,jdbcType=BIGINT},
-			</if>
-
-			<if test="logId != null">
-				log_id = #{logId,jdbcType=BIGINT},
-			</if>
-
 			<if test="status != null">
 				status = #{status,jdbcType=INTEGER},
 			</if>
@@ -52,7 +51,9 @@
 			</if>
 
 		</set>
-		where id = #{id,jdbcType=BIGINT}
+		where id = #{id,jdbcType=BIGINT} 
+		and job_id = #{jobId,jdbcType=BIGINT}
+		and log_id = #{logId,jdbcType=BIGINT}
 	</update>
 	<insert id="insert" parameterType="JobBlock" keyProperty="id" useGeneratedKeys="true">
 		insert into job_block (id, job_id, log_id,

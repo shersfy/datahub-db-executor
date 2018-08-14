@@ -9,9 +9,14 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 
+import org.shersfy.datahub.commons.beans.Result;
+import org.shersfy.datahub.commons.beans.Result.ResultCode;
 import org.shersfy.datahub.commons.constant.JobConst.JobLogStatus;
 import org.shersfy.datahub.commons.exception.DatahubException;
 import org.shersfy.datahub.commons.meta.ColumnMeta;
@@ -25,7 +30,9 @@ import org.shersfy.datahub.commons.utils.JobLogUtil;
 import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
 import org.shersfy.datahub.dbexecutor.feign.DhubDbExecutorClient;
+import org.shersfy.datahub.dbexecutor.job.JobBlockTask;
 import org.shersfy.datahub.dbexecutor.model.JobBlock;
+import org.shersfy.datahub.dbexecutor.model.JobBlockPk;
 import org.shersfy.datahub.dbexecutor.params.config.DataSourceConfig;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.shersfy.datahub.dbexecutor.params.template.InputDbParams;
@@ -37,6 +44,8 @@ import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.alibaba.fastjson.JSON;
 
 @RefreshScope
 @Transactional
@@ -53,6 +62,12 @@ public class JobServices {
 
     @Value("${job.block.records}")
     private int blcokRecords = 10000;
+    
+    @Value("${job.block.threads}")
+    private int threadsSize = 100;
+    
+    @Value("${job.block.dispatchRetry}")
+    private int dispatchRetry = 3;
 
     @Resource
     private LogManager logManager;
@@ -62,6 +77,13 @@ public class JobServices {
     
     @Resource
     private DhubDbExecutorClient dhubDbExecutorClient;
+    
+    private ExecutorService executor;
+    
+    @PostConstruct
+    private void init() {
+        executor = Executors.newFixedThreadPool(threadsSize);
+    }
 
 
     /***
@@ -69,8 +91,47 @@ public class JobServices {
      * @param blockConfig
      */
     @Async
-    public void execute(Long blockId) {
-        LOGGER.info("block={}", blockId);
+    public void execute(JobConfig block) {
+        if(block==null) {
+            return;
+        }
+        
+        JobBlock info = new JobBlock();
+        info.setId(Long.valueOf(block.getInputParams().getBlock().getIndex()));
+        info.setJobId(block.getJobId());
+        info.setLogId(block.getLogId());
+        info.setConfig(block.toString());
+        info.setStatus(JobLogStatus.Executing.index());
+        
+        JobBlock old = jobBlockService.findByPk(new JobBlockPk(info));
+        // 记录不存在
+        if(old==null) {
+            int cnt = jobBlockService.insert(info);
+            if(cnt!=1) {
+                LOGGER.error("insert block return 0 error: {}", info);
+                return;
+            }
+            
+        } 
+        // 记录存在
+        else {
+            // 参数无变化，已执行成功，无需再执行
+            if(old.getStatus() == JobLogStatus.Successful.index()
+                && old.getConfig().equals(info.getConfig())){
+                LOGGER.info("block already executed successful: {}", info);
+                return;
+            }
+
+            // 参数有变化，更新配置，重新执行
+            // 参数无变化，执行失败，更新配置，重新执行
+            int cnt = jobBlockService.updateByPk(info);
+            if(cnt!=1) {
+                LOGGER.error("update block return 0 error: {}", info);
+                return;
+            }   
+        }
+        // 添加到执行器
+        executor.submit(new JobBlockTask(info, jobBlockService));
     }
 
     /**
@@ -107,15 +168,31 @@ public class JobServices {
      * @param blocks
      */
     public void dispatchBlocks(List<JobConfig> blocks) {
-        for(JobConfig blk : blocks) {
-            JobBlock info = new JobBlock();
-            info.setJobId(blk.getJobId());
-            info.setLogId(blk.getLogId());
-            info.setConfig(blk.toString());
-            info.setStatus(JobLogStatus.Dummy.index());
-            jobBlockService.insert(info);
+        dispatchBlocks(blocks, 0);
+    }
+    
+    public void dispatchBlocks(List<JobConfig> blocks, int retry) {
+        List<JobConfig> errors = new ArrayList<>();
+        for(JobConfig block : blocks) {
             // 下发配置
-            dhubDbExecutorClient.callExecuteJob(info.getId());
+            String text = dhubDbExecutorClient.callExecuteJob(block.toString());
+            Result res  = JSON.parseObject(text, Result.class);
+            if(res.getCode()!=ResultCode.SUCESS) {
+                LOGGER.error("dispatch block error: retry times={}, block={}", retry, block);
+                errors.add(block);
+            }
+        }
+        
+        if(!errors.isEmpty()) {
+            if(retry>dispatchRetry) {
+                // 递归重试结束
+                return;
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+            }
+            dispatchBlocks(errors, retry+1);
         }
     }
 

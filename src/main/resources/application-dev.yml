@@ -15,9 +15,11 @@ spring:
 # jobs
 job:
   block:
+    threads: 100
     max: 10 # 最大块数 
     maxIndexNotExist: 1 # 没有索引时最大块数
     records: 10000 # 每块记录数
+    dispatchRetry: 3
 # hystrix 必须加否则无效(默认false)
 feign: 
   hystrix:

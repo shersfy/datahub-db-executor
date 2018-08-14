@@ -57,8 +57,8 @@ public class DbExecutorController extends BaseController{
     }
     
     @GetMapping("/job/execute")
-    public Result executeJob(Long blockId) {
-        jobServices.execute(blockId);
+    public Result executeJob(String block) {
+        jobServices.execute(JSON.parseObject(block, JobConfig.class));
         return new Result(SUCESS, "received successful");
     }
     

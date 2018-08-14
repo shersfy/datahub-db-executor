@@ -15,6 +15,6 @@ public interface DhubDbExecutorClient extends ServicesFeignClient{
     
     @RequestMapping(method = RequestMethod.GET, value = "/job/execute")
     @ResponseBody
-    String callExecuteJob(@RequestParam("blockId")Long blockId);
+    String callExecuteJob(@RequestParam("block")String block);
     
 }

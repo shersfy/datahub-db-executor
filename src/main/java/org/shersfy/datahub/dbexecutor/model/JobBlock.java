@@ -12,7 +12,7 @@ public class JobBlock extends BaseEntity {
     /** 任务日志ID **/
     private Long logId;
 
-    /** 结果状态(0：执行中(默认)，1：执行成功，2：执行失败) **/
+    /** 结果状态(1：执行中(默认)，2：执行成功，3：执行失败) **/
     private Integer status;
 
     /** 配置参数 **/
