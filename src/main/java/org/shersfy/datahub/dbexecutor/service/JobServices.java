@@ -141,14 +141,14 @@ public class JobServices {
      */
     @Async
     @Transactional(propagation=Propagation.NOT_SUPPORTED)
-    public void split(JobConfig allConfig) {
+    public void config(JobConfig config) {
 
         List<JobConfig> blocks = new ArrayList<>();
         try {
-            List<InputDbParams> parts = splitParams(allConfig.getInputParams());
+            List<InputDbParams> parts = split(config.getInputParams());
 
             for(InputDbParams input : parts) {
-                JobConfig blk = (JobConfig) allConfig.clone();
+                JobConfig blk = (JobConfig) config.clone();
                 blk.setInputParams(input);
                 blocks.add(blk);
             }
@@ -156,19 +156,26 @@ public class JobServices {
         } catch (Throwable ex) {
             LOGGER.error("", ex);
             String err = ex.getMessage();
-            err = JobLogUtil.getMsgData(Level.ERROR, allConfig.getJobId(), allConfig.getLogId(), err).toString();
+            err = JobLogUtil.getMsgData(Level.ERROR, config.getJobId(), config.getLogId(), err).toString();
             logManager.sendMsg(new MessageData(err));
         }
 
         // 历史残留数据处理
         JobBlock where = new JobBlock();
-        where.setJobId(allConfig.getJobId());
-        where.setLogId(allConfig.getJobId());
+        where.setJobId(config.getJobId());
+        where.setLogId(config.getJobId());
         
-        List<JobBlock> list = jobBlockService.findList(where);
-        if(!list.isEmpty() && jobBlockService.isFinished(list)) {
-            // 清除历史未清除的全部执行完毕的切片
-            jobBlockService.deleteBlocks(list.get(0));
+        List<JobBlock> history = jobBlockService.findList(where);
+        
+        // 历史切片和当前切片数量不等
+        boolean where1 = !history.isEmpty() && history.size()!=blocks.size();
+        // 历史切片全部正确执行完毕
+        boolean where2 = !history.isEmpty() && jobBlockService.isFinished(history);
+        
+        if(where1 || where2) {
+            int cnt = jobBlockService.deleteBlocks(history.get(0));
+            LOGGER.info("jobId={}, logId={}, deleted history finished blocks size={}", 
+                config.getJobId(), config.getJobId(), cnt);
         }
         
         // 不需要事务支持，因为一旦删除操作事务没提交，分发出去的切片在数据库中还能查到
@@ -213,7 +220,7 @@ public class JobServices {
      * @throws DatahubException 
      * @throws CloneNotSupportedException 
      */
-    public List<InputDbParams> splitParams(InputDbParams param) throws DatahubException {
+    public List<InputDbParams> split(InputDbParams param) throws DatahubException {
 
         param.setWhere(param.getWhere()==null?"":param.getWhere());
         
