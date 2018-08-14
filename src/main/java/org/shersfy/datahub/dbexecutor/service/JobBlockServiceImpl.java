@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
-@Transactional(rollbackFor= {Exception.class, Throwable.class})
+@Transactional
 @Service
 public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long> 
 	implements JobBlockService{

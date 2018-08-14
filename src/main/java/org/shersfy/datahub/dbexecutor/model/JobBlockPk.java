@@ -16,6 +16,13 @@ public class JobBlockPk implements Serializable{
     /** 任务日志ID **/
     private Long logId;
     
+    public JobBlockPk(Long id, Long jobId, Long logId) {
+        super();
+        this.id = id;
+        this.jobId = jobId;
+        this.logId = logId;
+    }
+
     public JobBlockPk(JobBlock block) {
         this.id    = block.getId();
         this.jobId = block.getJobId();

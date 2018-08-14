@@ -4,7 +4,6 @@ import javax.annotation.Resource;
 
 import org.shersfy.datahub.commons.beans.Result;
 import org.shersfy.datahub.dbexecutor.model.JobBlock;
-import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.shersfy.datahub.dbexecutor.service.JobBlockService;
 import org.shersfy.datahub.dbexecutor.service.JobServices;
 import org.slf4j.Logger;
@@ -14,8 +13,6 @@ import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.alibaba.fastjson.JSON;
 
 @RestController
 @RefreshScope
@@ -46,19 +43,13 @@ public class DbExecutorController extends BaseController{
 
     @GetMapping("/job/config")
     public Result configJob(Long jobId, Long logId, String config) {
-        
-        JobConfig cfg = JSON.parseObject(config, JobConfig.class);
-        cfg.setJobId(jobId);
-        cfg.setLogId(logId);
-        
-        jobServices.config(cfg);
-        
+        jobServices.config(jobId, logId, config);
         return new Result(SUCESS, "received successful");
     }
     
     @GetMapping("/job/execute")
-    public Result executeJob(String block) {
-        jobServices.execute(JSON.parseObject(block, JobConfig.class));
+    public Result executeJobBlock(String blockPk) {
+        jobServices.execute(blockPk);
         return new Result(SUCESS, "received successful");
     }
     

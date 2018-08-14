@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
 
+import org.apache.commons.lang.StringUtils;
 import org.shersfy.datahub.commons.beans.Result;
 import org.shersfy.datahub.commons.beans.Result.ResultCode;
 import org.shersfy.datahub.commons.constant.JobConst.JobLogStatus;
@@ -27,6 +28,7 @@ import org.shersfy.datahub.commons.meta.MessageData;
 import org.shersfy.datahub.commons.meta.RowData;
 import org.shersfy.datahub.commons.meta.TableMeta;
 import org.shersfy.datahub.commons.utils.JobLogUtil;
+import org.shersfy.datahub.commons.utils.JobLogUtil.JobLogPayload;
 import org.shersfy.datahub.commons.utils.LocalHostUtil;
 import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
@@ -95,48 +97,23 @@ public class JobServices {
      * @param blockConfig
      */
     @Async
-    public void execute(JobConfig block) {
-        if(block==null) {
+    public void execute(String blockPk) {
+        if(StringUtils.isBlank(blockPk)) {
             return;
         }
         
-        JobBlock info = new JobBlock();
-        info.setId(Long.valueOf(block.getInputParams().getBlock().getIndex()));
-        info.setJobId(block.getJobId());
-        info.setLogId(block.getLogId());
-        info.setService(SERVICE_NAME);
-        info.setConfig(block.toString());
-        info.setStatus(JobLogStatus.Executing.index());
-        
-        JobBlock old = jobBlockService.findByPk(new JobBlockPk(info));
+        JobBlockPk pk = JSON.parseObject(blockPk, JobBlockPk.class);
+        JobBlock block= jobBlockService.findByPk(pk);
         // 记录不存在
-        if(old==null) {
-            int cnt = jobBlockService.insert(info);
-            if(cnt!=1) {
-                LOGGER.error("insert block return 0 error: {}", info);
-                return;
-            }
-            
+        if(block == null) {
+            LOGGER.error("block not exist: {}", pk);
+            String err = new JobLogPayload(pk.getJobId(), pk.getLogId(), "block not exist: block id="+pk.getId()).toString();
+            logManager.sendMsg(new MessageData(err));
+            return;
         } 
-        // 记录存在
-        else {
-            // 参数无变化，已执行成功，无需再执行
-            if(old.getStatus() == JobLogStatus.Successful.index()
-                && old.getConfig().equals(info.getConfig())){
-                LOGGER.info("block already executed successful: {}", info);
-                return;
-            }
-
-            // 参数有变化，更新配置，重新执行
-            // 参数无变化，执行失败，更新配置，重新执行
-            int cnt = jobBlockService.updateByPk(info);
-            if(cnt!=1) {
-                LOGGER.error("update block return 0 error: {}", info);
-                return;
-            }   
-        }
+        
         // 添加到执行器
-        executor.submit(new JobBlockTask(info, jobBlockService));
+        executor.submit(new JobBlockTask(block, jobBlockService));
     }
 
     /**
@@ -145,8 +122,12 @@ public class JobServices {
      */
     @Async
     @Transactional(propagation=Propagation.NOT_SUPPORTED)
-    public void config(JobConfig config) {
+    public void config(Long jobId, Long logId, String cfg) {
 
+        JobConfig config = JSON.parseObject(cfg, JobConfig.class);
+        config.setJobId(jobId);
+        config.setLogId(logId);
+        
         List<JobConfig> blocks = new ArrayList<>();
         try {
             List<InputDbParams> parts = split(config.getInputParams());
@@ -167,7 +148,7 @@ public class JobServices {
         // 历史残留数据处理
         JobBlock where = new JobBlock();
         where.setJobId(config.getJobId());
-        where.setLogId(config.getJobId());
+        where.setLogId(config.getLogId());
         
         List<JobBlock> history = jobBlockService.findList(where);
         
@@ -178,13 +159,50 @@ public class JobServices {
         
         if(where1 || where2) {
             int cnt = jobBlockService.deleteBlocks(history.get(0));
-            LOGGER.info("jobId={}, logId={}, deleted history finished blocks size={}", 
+            history.clear();
+            LOGGER.info("jobId={}, logId={}, deleted history blocks size={}", 
                 config.getJobId(), config.getJobId(), cnt);
         }
         
+        
+        // 切片配置写入数据库
+        // 全部插入
+        if(history.isEmpty()) {
+            blocks.forEach(block -> jobBlockService.insert(parse(block)));
+        } 
+        // 全部更新
+        else {
+            
+            blocks.removeIf(block->{
+                
+                int index = block.getInputParams().getBlock().getIndex()+1;
+                JobBlock old = history.get(index);
+                // 参数无变化，已执行成功，无需再执行
+                if(old.getStatus() == JobLogStatus.Successful.index()
+                    && old.getConfig().equals(block.toString())){
+                    LOGGER.info("block already executed successful: {}", block);
+                    return true;
+                }
+                
+                return false;
+            });
+            
+            blocks.forEach(block -> jobBlockService.updateByPk(parse(block)));
+        }
+        
         // 不需要事务支持，因为一旦删除操作事务没提交，分发出去的切片在数据库中还能查到
-        dispatch(blocks, 0);
+        dispatch(blocks);
 
+    }
+    
+    private JobBlock parse(JobConfig block) {
+        JobBlock info = new JobBlock();
+        info.setId(Long.valueOf(block.getInputParams().getBlock().getIndex()));
+        info.setJobId(block.getJobId());
+        info.setLogId(block.getLogId());
+        info.setConfig(block.toString());
+        info.setStatus(JobLogStatus.Dummy.index());
+        return info;
     }
 
     /**
@@ -192,29 +210,18 @@ public class JobServices {
      * @param blocks
      * @param retry 重试次数
      */
-    public void dispatch(List<JobConfig> blocks, int retry) {
+    public void dispatch(List<JobConfig> blocks) {
         List<JobConfig> errors = new ArrayList<>();
         for(JobConfig block : blocks) {
             // 下发配置
-            String text = dhubDbExecutorClient.callExecuteJob(block.toString());
+            String text = dhubDbExecutorClient.callExecuteJob(new JobBlockPk(parse(block)).toString());
             Result res  = JSON.parseObject(text, Result.class);
             if(res.getCode()!=ResultCode.SUCESS) {
-                LOGGER.error("dispatch block error: retry times={}, block={}", retry, block);
+                LOGGER.error("dispatch block error: {}", block);
                 errors.add(block);
             }
         }
         
-        if(!errors.isEmpty()) {
-            if(retry>dispatchRetry) {
-                // 递归重试结束
-                return;
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-            }
-            dispatch(errors, retry+1);
-        }
     }
 
     /***
@@ -348,18 +355,30 @@ public class JobServices {
             }
 
             // 第三步，计算切点
-            // 1. 分块字段IS NOT NULL的情况
-            // 分块区间值计算(公差)
+            // 2. 分块字段IS NULL的情况
             StringBuffer condition = new StringBuffer(0);
+
+            TablePartition part = new TablePartition();
+            condition.append(blockColumnName).append(" IS NULL");
+            part.setIndex(-1);
+            part.setCondition(condition.toString());
+            part.setPartColumn(blockColumn);
+
+            InputDbParams clone = (InputDbParams) param.clone();
+            clone.setBlock(part);
+            blocks.add(clone);
+
+            // 2. 分块字段IS NOT NULL的情况
+            // 分块区间值计算(公差)
             double section = (max - min) / blockCnt;
             for (int p = 0; p < blockCnt; p++) {
 
                 double start = min   + section * p;
                 double end   = start + section;
 
-                List<Object> conditionArgs = new ArrayList<>();
-                TablePartition part = new TablePartition();
+                part = new TablePartition();
                 condition.setLength(0);
+                List<Object> conditionArgs = new ArrayList<>();
 
                 if(max == min){
                     condition.append(blockColumnName).append(" = ? ");
@@ -392,28 +411,15 @@ public class JobServices {
                 part.setConditionArgs(conditionArgs);
                 part.setPartColumn(blockColumn);
 
-                InputDbParams clone = (InputDbParams) param.clone();
+                clone = (InputDbParams) param.clone();
                 clone.setBlock(part);
-
                 blocks.add(clone);
+                
                 if(max == min){
                     break;
                 }
             }
 
-
-            // 2. 分块字段IS NULL的情况
-            condition.setLength(0);
-
-            TablePartition part = new TablePartition();
-            condition.append(blockColumnName).append(" IS NULL");
-            part.setIndex(-1);
-            part.setCondition(condition.toString());
-            part.setPartColumn(blockColumn);
-
-            InputDbParams clone = (InputDbParams) param.clone();
-            clone.setBlock(part);
-            blocks.add(clone);
             
         } catch (Throwable ex) {
             throw DatahubException.throwDatahubException("split job config error:", ex);

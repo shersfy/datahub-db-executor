@@ -13,6 +13,10 @@ public class JobBlockTask implements Callable<JobBlock>{
     
     Logger LOGGER = LoggerFactory.getLogger(JobServices.class);
     
+    private Long jobId = null;
+    private Long logId = null;
+    private Long blkId = null;
+    
     private JobBlock block;
     
     private JobBlockService service;
@@ -25,29 +29,83 @@ public class JobBlockTask implements Callable<JobBlock>{
 
     @Override
     public JobBlock call() throws Exception {
-        
-        Long jobId = block.getJobId();
-        Long logId = block.getLogId();
-        Long blkId = block.getId();
-        
+
+
+        try {
+
+            before();
+
+            LOGGER.info("running: {}", block.toString());
+            try {
+                int sleep = 5;
+                if(blkId<0) {
+                    sleep = 10;
+                }
+                else if(blkId%2==0) {
+                    sleep = 6;
+                }
+                Thread.sleep(sleep);
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+            after();
+            
+        } catch (Exception ex) {
+            exception(ex);
+        } finally {
+            finallyDo();
+        }
+
+        return block;
+    }
+    
+    
+    protected void before() {
+
+        jobId = block.getJobId();
+        logId = block.getLogId();
+        blkId = block.getId();
+        String thread = String.format("job_%s_%s_%s", jobId, logId, blkId);
+        Thread.currentThread().setName(thread);
+
         LOGGER.info("jobId={}, logId={}, blockId={}, begining ...", jobId, logId, blkId);
         
-        LOGGER.info("jobId={}, logId={}, blockId={}, block:{}", jobId, logId, blkId, block);
+        JobBlock udp = new JobBlock();
+        udp.setId(blkId);
+        udp.setJobId(jobId);
+        udp.setLogId(logId);
+        udp.setService(JobServices.SERVICE_NAME);
+        udp.setStatus(JobLogStatus.Executing.index());
+
+        service.updateByPk(udp);
+    }
+    
+    protected void after() {
+        
         JobBlock udp = new JobBlock();
         udp.setId(blkId);
         udp.setJobId(jobId);
         udp.setLogId(logId);
         udp.setStatus(JobLogStatus.Successful.index());
         service.updateByPk(udp);
-        LOGGER.info("jobId={}, logId={}, blockId={}, finished", jobId, logId, blkId);
-
+        
         if(service.isFinished(jobId, logId)) {
             int cnt = service.deleteBlocks(block);
             LOGGER.info("jobId={}, logId={}, deleted blocks size={}, all blocks finished", 
                 jobId, logId, cnt);
         }
         
-        return block;
+        LOGGER.info("jobId={}, logId={}, blockId={}, execute successful", jobId, logId, blkId);
+    }
+    
+    protected void exception(Throwable ex) {
+        LOGGER.error("", ex);
+    }
+    
+    protected void finallyDo() {
+        LOGGER.info("jobId={}, logId={}, blockId={}, finished", jobId, logId, blkId);
     }
 
     
