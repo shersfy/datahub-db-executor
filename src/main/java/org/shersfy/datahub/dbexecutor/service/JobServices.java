@@ -36,9 +36,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
-@Component
 @RefreshScope
+@Transactional
+@Component
 public class JobServices {
 
     Logger LOGGER = LoggerFactory.getLogger(JobServices.class);
@@ -78,9 +80,9 @@ public class JobServices {
     @Async
     public void splitJobConfig(JobConfig allConfig) {
 
+        List<JobConfig> blocks = new ArrayList<>();
         try {
             List<InputDbParams> parts = split(allConfig.getInputParams());
-            List<JobConfig> blocks    = new ArrayList<>();
 
             for(InputDbParams input : parts) {
                 JobConfig blk = (JobConfig) allConfig.clone();
@@ -88,14 +90,15 @@ public class JobServices {
                 blocks.add(blk);
             }
 
-            dispatchBlocks(blocks);
-
         } catch (Throwable ex) {
             LOGGER.error("", ex);
             String err = ex.getMessage();
             err = JobLogUtil.getMsgData(Level.ERROR, allConfig.getJobId(), allConfig.getLogId(), err).toString();
             logManager.sendMsg(new MessageData(err));
         }
+
+        // 需要处理事务，故不放在try中
+        dispatchBlocks(blocks);
 
     }
 
@@ -109,7 +112,7 @@ public class JobServices {
             info.setJobId(blk.getJobId());
             info.setLogId(blk.getLogId());
             info.setConfig(blk.toString());
-            info.setStatus(JobLogStatus.Executing.index());
+            info.setStatus(JobLogStatus.Dummy.index());
             jobBlockService.insert(info);
             // 下发配置
             dhubDbExecutorClient.callExecuteJob(info.getId());

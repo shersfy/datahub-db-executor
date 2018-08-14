@@ -10,9 +10,11 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @EnableAsync
 @EnableDiscoveryClient
+@EnableTransactionManagement
 @EnableFeignClients(basePackages="org.shersfy.datahub.dbexecutor.feign")
 @MapperScan("org.shersfy.datahub.dbexecutor.mapper")
 @ComponentScan(basePackages="org.shersfy.datahub.dbexecutor",
