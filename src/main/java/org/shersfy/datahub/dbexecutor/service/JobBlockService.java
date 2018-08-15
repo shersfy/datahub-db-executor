@@ -41,4 +41,6 @@ public interface JobBlockService extends BaseService<JobBlock, Long> {
     
     LogManager getLogManager();
 
+    TableLockService getTableLockService();
+
 }

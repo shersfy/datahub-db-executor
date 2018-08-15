@@ -24,6 +24,7 @@ public class DataSourceConfig extends BaseMeta{
             dbMeta.setCode(getDbType());
             dbMeta.setUserName(getUsername());
             dbMeta.setPassword(getPassword());
+            return dbMeta;
         }
         return meta;
     }

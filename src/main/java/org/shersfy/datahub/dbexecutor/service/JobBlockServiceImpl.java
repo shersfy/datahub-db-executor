@@ -23,6 +23,9 @@ public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long>
     
     @Resource
     private LogManager logManager;
+    
+    @Resource
+    private TableLockService lockService;
 
     @Override
     public BaseMapper<JobBlock, Long> getMapper() {
@@ -83,6 +86,11 @@ public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long>
     @Override
     public LogManager getLogManager() {
         return logManager;
+    }
+
+    @Override
+    public TableLockService getTableLockService() {
+        return lockService;
     }
     
 }

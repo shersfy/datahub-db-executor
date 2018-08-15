@@ -20,6 +20,9 @@ public class JobBlock extends BaseEntity {
     
     /** 配置参数 **/
     private String config;
+    
+    /** 临时数据 **/
+    private String tmp;
 
     public Long getJobId() {
         return jobId;
@@ -59,5 +62,13 @@ public class JobBlock extends BaseEntity {
 
     public void setService(String service) {
         this.service = service;
+    }
+
+    public String getTmp() {
+        return tmp;
+    }
+
+    public void setTmp(String tmp) {
+        this.tmp = tmp;
     }
 }

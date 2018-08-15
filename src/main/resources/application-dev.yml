@@ -10,6 +10,7 @@ spring:
       jdbc-url: jdbc:mysql://127.0.0.1:3306/datahub_db_executor?useUnicode=true&characterEncoding=utf8&useSSL=false
       username: '{cipher}6d7a6184efc2a28a9c7e7b31ca462a8099b3a637607fd68262cb44dc99388f69'
       password: '{cipher}1033b1da3eee0e66e254fd8560df4d81f2f69b8d75cce4befb3d756d0d4ec088'
+      
 # jobs
 job:
   block:
@@ -19,37 +20,50 @@ job:
     records: 10000 # 每块记录数
     cacheSize: 10 # 缓存量大小, 单位兆(M)
     progressPeriodSeconds: 10 # 汇报进度周期, 单位秒(s)
+
+# table lock
+lock: 
+  table:
+    timeoutSeconds: 300
+  record:
+    timeoutSeconds: 300
+    
 # hystrix 必须加否则无效(默认false)
 feign: 
   hystrix:
     enabled: true
+    
 hystrix:
-    command:
-        datahub-db-executor:
-            execution:
-                isolation:
-                    strategy: THREAD
-                    thread:
-                        interruptOnTimeout: true
-                        timeoutInMilliseconds: 5000
-                timeout:
-                    enabled: true
+  command:
+    datahub-db-executor:
+      execution:
+        timeout:
+          enabled: true
+        isolation:
+          strategy: THREAD
+          thread:
+            interruptOnTimeout: true
+            timeoutInMilliseconds: 5000
+            
 datahub-db-executor:
   ribbon:
     ConnectTimeout: 5000
     ReadTimeout: 5000
     MaxTotalHttpConnections: 500
     MaxConnectionsPerHost: 100
+    
 # management
 management:
   endpoints:
     web:
       exposure:
         include: refresh, bus-refresh
+        
 # mybatis
 mybatis:
   mapper-locations: classpath:mapping/*.xml
   type-aliases-package: org.shersfy.datahub.dbexecutor.model
+  
 # logging
 logging:
   file: logs/${spring.application.name}.log

@@ -27,7 +27,7 @@ public abstract class BaseServiceImpl<T extends BaseEntity, Id extends Serializa
     }
 
     @Override
-    public int deleteByIds(List<Long> ids) {
+    public int deleteByIds(List<Id> ids) {
         return getMapper().deleteByIds(ids);
     }
 

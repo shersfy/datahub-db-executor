@@ -77,7 +77,7 @@ public class JobServices {
     private int progressPeriodSeconds = 10;
     
     @Value("${job.block.cacheSize}")
-    private float cacheSize = 10; // 10M
+    private int cacheSize = 10; // 10M
 
     @Resource
     private LogManager logManager;
@@ -179,7 +179,7 @@ public class JobServices {
             
             blocks.removeIf(block->{
                 
-                int index = block.getInputParams().getBlock().getIndex()+1;
+                int index = history.size()==1?0:block.getInputParams().getBlock().getIndex()+1;
                 JobBlock old = history.get(index);
                 // 参数无变化，已执行成功，无需再执行
                 if(old.getStatus() == JobLogStatus.Successful.index()
@@ -251,9 +251,13 @@ public class JobServices {
             TableMeta table = param.getTable();
             List<ColumnMeta> columns = connector.getColumns(table, conn);
             ColumnMeta blockColumn   = getBlockColumn(columns);
+            
+            TablePartition defaultPart = new TablePartition();
+            defaultPart.setPartColumn(columns.get(0));
 
             // 没有满足条件的字段，返回1块
             if(blockColumn == null){
+                param.setBlock(defaultPart);
                 blocks.add(param);
                 return blocks;
             }
@@ -271,6 +275,7 @@ public class JobServices {
 
             // 不处理1个分块
             if(blockCnt <= 1){
+                param.setBlock(defaultPart);
                 blocks.add(param);
                 return blocks;
             }
@@ -349,6 +354,7 @@ public class JobServices {
                         break;
                     default:
                         blocks.add(param);
+                        param.setBlock(defaultPart);
                         return blocks;
                 }
 

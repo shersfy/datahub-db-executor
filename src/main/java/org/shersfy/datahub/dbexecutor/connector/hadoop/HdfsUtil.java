@@ -118,8 +118,13 @@ public class HdfsUtil {
 		
 	}
 	
+	public static FSDataOutputStream createHdfsFile(FileSystem fs, final String hdfsFile, 
+	                                                String createUser) throws DatahubException{
+	    return createHdfsFile(fs, hdfsFile, createUser, true);
+	}
+	
 	/**
-	 * 创建hdfs目录
+	 * 创建hdfs文件
 	 * 
 	 * @author PengYang
 	 * @date 2017-06-08
@@ -131,7 +136,7 @@ public class HdfsUtil {
 	 * @throws DatahubException
 	 */
 	public static FSDataOutputStream createHdfsFile(FileSystem fs, final String hdfsFile, 
-			String createUser) throws DatahubException{
+			String createUser, boolean overwrite) throws DatahubException{
 		
 		FSDataOutputStream output = null;
 		try {
@@ -157,7 +162,7 @@ public class HdfsUtil {
                 public Result run() {
                     Result res = new Result();
                     try {
-                        res.setModel(fs.create(file, true));
+                        res.setModel(fs.create(file, overwrite));
                     } catch (Throwable th) {
                         IOException ioe = null;
                         if(th instanceof IOException){
@@ -476,6 +481,10 @@ public class HdfsUtil {
 //			if(!Const.LEAP_SYSTEM_HDFS.equals(meta.getName()) || Const.AUTH_TYPE_SIMPLE==meta.getAuthType()){
 //				appUser = meta.getUserName();
 //			}
+			
+			if(StringUtils.isBlank(appUser)) {
+			    throw new DatahubException("userName cannot be empty");
+			}
 			
 			System.setProperty(HADOOP_USER_NAME, appUser);
 			HadoopAuthTypes auth = HadoopAuthTypes.indexOf(meta.getAuthType());

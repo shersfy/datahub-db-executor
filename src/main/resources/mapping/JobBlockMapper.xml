@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper
-	namespace="org.shersfy.datahub.dbexecutor.mapper.JobBlockMapper">
+<mapper namespace="org.shersfy.datahub.dbexecutor.mapper.JobBlockMapper">
 	<resultMap id="BaseResultMap" type="org.shersfy.datahub.dbexecutor.model.JobBlock">
 		<id column="id" property="id" jdbcType="BIGINT" />
 		<result column="job_id" property="jobId" jdbcType="BIGINT" />
 		<result column="log_id" property="logId" jdbcType="BIGINT" />
 		<result column="status" property="status" jdbcType="INTEGER" />
 		<result column="service" property="service" jdbcType="VARCHAR" />
-		<result column="config" property="config" jdbcType="LONGVARCHAR" />
+		<result column="config"  property="config" jdbcType="LONGVARCHAR" />
+		<result column="tmp"     property="tmp" jdbcType="LONGVARCHAR" />
 		<result column="create_time" property="createTime" jdbcType="TIMESTAMP" />
 		<result column="update_time" property="updateTime" jdbcType="TIMESTAMP" />
 	</resultMap>
 	<sql id="Base_Column_List">
-		id, job_id, log_id, status, service, config, create_time, update_time
+		id, job_id, log_id, status, service, config, tmp, create_time, update_time
 	</sql>
 	<select id="findByPk" resultMap="BaseResultMap" parameterType="map">
 		select
@@ -47,6 +47,10 @@
 				config = #{config,jdbcType=LONGVARCHAR},
 			</if>
 			
+			<if test="tmp != null">
+				tmp = #{tmp,jdbcType=LONGVARCHAR},
+			</if>
+			
 			<if test="createTime != null">
 				create_time = #{createTime,jdbcType=TIMESTAMP},
 			</if>
@@ -61,10 +65,11 @@
 	</update>
 	<insert id="insert" parameterType="JobBlock" keyProperty="id" useGeneratedKeys="true">
 		insert into job_block (id, job_id, log_id,
-		status, service, config, create_time, update_time)
+		status, service, config, tmp,
+		create_time, update_time)
 		values (#{id,jdbcType=BIGINT}, #{jobId,jdbcType=BIGINT},
 		#{logId,jdbcType=BIGINT}, #{status,jdbcType=INTEGER},
-		#{service,jdbcType=VARCHAR}, #{config,jdbcType=LONGVARCHAR},
+		#{service,jdbcType=VARCHAR}, #{config,jdbcType=LONGVARCHAR}, #{tmp,jdbcType=LONGVARCHAR},
 		#{createTime,jdbcType=TIMESTAMP}, #{updateTime,jdbcType=TIMESTAMP})
 	</insert>
 	<select id="findList" resultMap="BaseResultMap" parameterType="JobBlock">
