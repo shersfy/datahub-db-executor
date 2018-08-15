@@ -1,6 +1,9 @@
 package org.shersfy.datahub.dbexecutor.params.config;
 
+import org.shersfy.datahub.commons.exception.DatahubException;
 import org.shersfy.datahub.commons.meta.BaseMeta;
+import org.shersfy.datahub.commons.meta.DBMeta;
+import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 
 public class DataSourceConfig extends BaseMeta{
 
@@ -12,6 +15,18 @@ public class DataSourceConfig extends BaseMeta{
     private String username;
     /**JDBC连接密码(密文)**/
     private String password;
+    
+    private DBMeta meta;
+    
+    public DBMeta getDBMeta() throws DatahubException {
+        if(meta==null) {
+            DBMeta dbMeta = DbConnectorInterface.getMetaByUrl(getUrl());
+            dbMeta.setCode(getDbType());
+            dbMeta.setUserName(getUsername());
+            dbMeta.setPassword(getPassword());
+        }
+        return meta;
+    }
 
     public String getDbType() {
         return dbType;

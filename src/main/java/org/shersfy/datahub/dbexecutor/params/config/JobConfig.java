@@ -8,12 +8,6 @@ import org.shersfy.datahub.dbexecutor.params.template.OutputHiveParams;
 
 public class JobConfig extends BaseMeta{
     
-    /**任务ID**/
-    private Long jobId;
-    
-    /**任务执行日志ID**/
-    private Long logId;
-    
     /**数据源输入参数**/
     private InputDbParams inputParams;
     
@@ -36,22 +30,6 @@ public class JobConfig extends BaseMeta{
         }
         
         return this.toString().equals(obj.toString());
-    }
-
-    public Long getJobId() {
-        return jobId;
-    }
-
-    public void setJobId(Long jobId) {
-        this.jobId = jobId;
-    }
-
-    public Long getLogId() {
-        return logId;
-    }
-
-    public void setLogId(Long logId) {
-        this.logId = logId;
     }
 
     public InputDbParams getInputParams() {

@@ -318,10 +318,10 @@ public class OracleConnector extends DbConnectorInterface {
 	}
 
 	@Override
-	public FieldData formatFieldData(Connection conn, ColumnMeta column, FieldData field) throws SQLException {
+	public void formatFieldData(Connection conn, ColumnMeta column, FieldData field) throws SQLException {
 		super.formatFieldData(conn, column, field);
 		if(field == null){
-			return null;
+			return;
 		}
 		switch (column.getDataType()) {
 		case oracle.jdbc.OracleTypes.TIMESTAMPTZ:
@@ -354,7 +354,6 @@ public class OracleConnector extends DbConnectorInterface {
 		default:
 			break;
 		}
-		return field;
 	}
 	
 	@Override

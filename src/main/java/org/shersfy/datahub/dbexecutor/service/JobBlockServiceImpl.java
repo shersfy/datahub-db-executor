@@ -20,6 +20,9 @@ public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long>
     
     @Resource
     private JobBlockMapper mapper;
+    
+    @Resource
+    private LogManager logManager;
 
     @Override
     public BaseMapper<JobBlock, Long> getMapper() {
@@ -75,6 +78,11 @@ public class JobBlockServiceImpl extends BaseServiceImpl<JobBlock, Long>
         }
         
         return true;
+    }
+
+    @Override
+    public LogManager getLogManager() {
+        return logManager;
     }
     
 }

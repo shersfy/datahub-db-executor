@@ -59,6 +59,8 @@ public class HdfsUtil {
 	private static final Logger LOGGER = LoggerFactory.getLogger(HdfsUtil.class);
 	/**HDFS环境变量**/
     public static final String HADOOP_USER_NAME = "HADOOP_USER_NAME";
+    /**默认文件列分隔符**/
+    public static final String DEFAULT_COLUMN_SEP = "\u0001";
 	
 	/**
 	 * 创建hdfs目录
@@ -749,6 +751,7 @@ public class HdfsUtil {
 		}
 		byte bytes[] = content.getBytes(CharsetUtil.getUTF8());
 		outputStream.write(bytes, 0, bytes.length);
+		outputStream.flush();
 	}
 	/**
 	 * 写内容到hdfs文件

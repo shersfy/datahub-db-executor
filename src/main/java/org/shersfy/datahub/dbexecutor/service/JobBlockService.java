@@ -38,5 +38,7 @@ public interface JobBlockService extends BaseService<JobBlock, Long> {
      * @return
      */
     boolean isFinished(List<JobBlock> blocks);
+    
+    LogManager getLogManager();
 
 }

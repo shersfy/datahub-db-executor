@@ -8,7 +8,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -24,7 +26,6 @@ import org.shersfy.datahub.commons.meta.ColumnMeta;
 import org.shersfy.datahub.commons.meta.DBMeta;
 import org.shersfy.datahub.commons.meta.FieldData;
 import org.shersfy.datahub.commons.meta.GridData;
-import org.shersfy.datahub.commons.meta.MessageData;
 import org.shersfy.datahub.commons.meta.RowData;
 import org.shersfy.datahub.commons.meta.TableMeta;
 import org.shersfy.datahub.commons.utils.JobLogUtil;
@@ -72,8 +73,11 @@ public class JobServices {
     @Value("${job.block.threads}")
     private int threadsSize = 100;
     
-    @Value("${job.block.dispatchRetry}")
-    private int dispatchRetry = 3;
+    @Value("${job.block.progressPeriodSeconds}")
+    private int progressPeriodSeconds = 10;
+    
+    @Value("${job.block.cachePercent}")
+    private float cachePercent = 0.01f;
 
     @Resource
     private LogManager logManager;
@@ -107,13 +111,18 @@ public class JobServices {
         // 记录不存在
         if(block == null) {
             LOGGER.error("block not exist: {}", pk);
-            String err = new JobLogPayload(pk.getJobId(), pk.getLogId(), "block not exist: block id="+pk.getId()).toString();
-            logManager.sendMsg(new MessageData(err));
+            JobLogPayload payload = new JobLogPayload(pk.getJobId(), pk.getLogId(), 
+                "block not exist: block id="+pk.getId());
+            logManager.sendMsg(payload);
             return;
         } 
         
         // 添加到执行器
-        executor.submit(new JobBlockTask(block, jobBlockService));
+        Map<String, Object> datamap = new HashMap<>();
+        datamap.put("blcokRecords", blcokRecords);
+        datamap.put("cachePercent", cachePercent);
+        datamap.put("progressPeriodSeconds", progressPeriodSeconds);
+        executor.submit(new JobBlockTask(block, jobBlockService, datamap));
     }
 
     /**
@@ -125,8 +134,6 @@ public class JobServices {
     public void config(Long jobId, Long logId, String cfg) {
 
         JobConfig config = JSON.parseObject(cfg, JobConfig.class);
-        config.setJobId(jobId);
-        config.setLogId(logId);
         
         List<JobConfig> blocks = new ArrayList<>();
         try {
@@ -141,14 +148,13 @@ public class JobServices {
         } catch (Throwable ex) {
             LOGGER.error("", ex);
             String err = ex.getMessage();
-            err = JobLogUtil.getMsgData(Level.ERROR, config.getJobId(), config.getLogId(), err).toString();
-            logManager.sendMsg(new MessageData(err));
+            logManager.sendMsg(JobLogUtil.getMsgData(Level.ERROR, jobId, logId, err));
         }
 
         // 历史残留数据处理
         JobBlock where = new JobBlock();
-        where.setJobId(config.getJobId());
-        where.setLogId(config.getLogId());
+        where.setJobId(jobId);
+        where.setLogId(logId);
         
         List<JobBlock> history = jobBlockService.findList(where);
         
@@ -160,15 +166,14 @@ public class JobServices {
         if(where1 || where2) {
             int cnt = jobBlockService.deleteBlocks(history.get(0));
             history.clear();
-            LOGGER.info("jobId={}, logId={}, deleted history blocks size={}", 
-                config.getJobId(), config.getJobId(), cnt);
+            LOGGER.info("jobId={}, logId={}, deleted history blocks size={}", jobId, logId, cnt);
         }
         
         
         // 切片配置写入数据库
         // 全部插入
         if(history.isEmpty()) {
-            blocks.forEach(block -> jobBlockService.insert(parse(block)));
+            blocks.forEach(block -> jobBlockService.insert(parse(jobId, logId, block)));
         } 
         // 全部更新
         else {
@@ -187,19 +192,19 @@ public class JobServices {
                 return false;
             });
             
-            blocks.forEach(block -> jobBlockService.updateByPk(parse(block)));
+            blocks.forEach(block -> jobBlockService.updateByPk(parse(jobId, logId, block)));
         }
         
         // 不需要事务支持，因为一旦删除操作事务没提交，分发出去的切片在数据库中还能查到
-        dispatch(blocks);
+        dispatch(jobId, logId, blocks);
 
     }
     
-    private JobBlock parse(JobConfig block) {
+    private JobBlock parse(Long jobId, Long logId, JobConfig block) {
         JobBlock info = new JobBlock();
         info.setId(Long.valueOf(block.getInputParams().getBlock().getIndex()));
-        info.setJobId(block.getJobId());
-        info.setLogId(block.getLogId());
+        info.setJobId(jobId);
+        info.setLogId(logId);
         info.setConfig(block.toString());
         info.setStatus(JobLogStatus.Dummy.index());
         return info;
@@ -210,11 +215,11 @@ public class JobServices {
      * @param blocks
      * @param retry 重试次数
      */
-    public void dispatch(List<JobConfig> blocks) {
+    public void dispatch(Long jobId, Long logId, List<JobConfig> blocks) {
         List<JobConfig> errors = new ArrayList<>();
         for(JobConfig block : blocks) {
             // 下发配置
-            String text = dhubDbExecutorClient.callExecuteJob(new JobBlockPk(parse(block)).toString());
+            String text = dhubDbExecutorClient.callExecuteJob(new JobBlockPk(parse(jobId, logId, block)).toString());
             Result res  = JSON.parseObject(text, Result.class);
             if(res.getCode()!=ResultCode.SUCESS) {
                 LOGGER.error("dispatch block error: {}", block);
@@ -236,12 +241,8 @@ public class JobServices {
         param.setWhere(param.getWhere()==null?"":param.getWhere());
         
         List<InputDbParams> blocks = new ArrayList<>();
-        DataSourceConfig ds    = param.getDataSource();
-
-        DBMeta dbMeta = DbConnectorInterface.getMetaByUrl(ds.getUrl());
-        dbMeta.setCode(param.getDataSource().getDbType());
-        dbMeta.setUserName(ds.getUsername());
-        dbMeta.setPassword(ds.getPassword());
+        DataSourceConfig ds = param.getDataSource();
+        DBMeta dbMeta = ds.getDBMeta();
 
         DbConnectorInterface connector = DbConnectorInterface.getInstance(dbMeta);
         Connection conn = null;

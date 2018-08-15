@@ -1116,7 +1116,8 @@ public abstract class DbConnectorInterface {
 				ColumnMeta header = headers.get(i-1);
 				FieldData fd = new FieldData(getResultObject(header, rs));
 				fd.setName(header.getName());
-				fields.add(this.formatFieldData(conn, header, fd));
+				this.formatFieldData(conn, header, fd);
+				fields.add(fd);
 			}
 			dataRow.setFields(fields);
 			rows.add(dataRow);
@@ -1555,11 +1556,11 @@ public abstract class DbConnectorInterface {
 	 * @throws SQLException 
 	 * @throws DatahubException 
 	 */
-	public FieldData formatFieldData(Connection conn, ColumnMeta column, FieldData field) 
+	public void formatFieldData(Connection conn, ColumnMeta column, FieldData field) 
 			throws SQLException {
 
 		if(field == null){
-			return null;
+			return;
 		}
 		switch (column.getDataType()) {
 		case Types.BLOB:
@@ -1630,7 +1631,6 @@ public abstract class DbConnectorInterface {
 		default:
 			break;
 		}
-		return field;
 	}
 	
 	/**

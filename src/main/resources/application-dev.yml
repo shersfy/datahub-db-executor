@@ -17,11 +17,29 @@ job:
     max: 10 # 最大块数 
     maxIndexNotExist: 1 # 没有索引时最大块数
     records: 10000 # 每块记录数
-    dispatchRetry: 3
+    cachePercent: 0.1 # 块处理缓存百分比
+    progressPeriodSeconds: 10 # 汇报进度周期 
 # hystrix 必须加否则无效(默认false)
 feign: 
   hystrix:
     enabled: true
+hystrix:
+    command:
+        datahub-db-executor:
+            execution:
+                isolation:
+                    strategy: THREAD
+                    thread:
+                        interruptOnTimeout: true
+                        timeoutInMilliseconds: 5000
+                timeout:
+                    enabled: true
+datahub-db-executor:
+  ribbon:
+    ConnectTimeout: 5000
+    ReadTimeout: 5000
+    MaxTotalHttpConnections: 500
+    MaxConnectionsPerHost: 100
 # management
 management:
   endpoints:

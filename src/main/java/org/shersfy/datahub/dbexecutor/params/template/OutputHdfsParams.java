@@ -13,6 +13,9 @@ public class OutputHdfsParams extends BaseMeta {
     
     /**输出hdfs文件路径**/
     private String file;
+    
+    /**字段列分隔符**/
+    private String columnSep;
 
     public HdfsMeta getHdfs() {
         return hdfs;
@@ -36,6 +39,14 @@ public class OutputHdfsParams extends BaseMeta {
 
     public void setFile(String file) {
         this.file = file;
+    }
+
+    public String getColumnSep() {
+        return columnSep;
+    }
+
+    public void setColumnSep(String columnSep) {
+        this.columnSep = columnSep;
     }
 
     
