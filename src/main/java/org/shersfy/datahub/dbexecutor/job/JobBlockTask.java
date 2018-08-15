@@ -51,8 +51,6 @@ public class JobBlockTask implements Callable<JobBlock>{
     
     /**缓存量**/
     private int cacheSize;
-    /**每个切片记录容量**/
-    private int blcokRecords;
     /**进度汇报周期**/
     private int progressPeriodSeconds;
     
@@ -75,9 +73,7 @@ public class JobBlockTask implements Callable<JobBlock>{
         this.logId = block.getLogId();
         this.blkId = block.getId();
         
-        this.blcokRecords  = (int) datamap.get("blcokRecords");
-        float cachePercent = (float) datamap.get("cachePercent");
-        this.cacheSize     = (int)(blcokRecords * cachePercent);
+        this.cacheSize     = (int)datamap.get("cacheSize");
     }
 
     @Override

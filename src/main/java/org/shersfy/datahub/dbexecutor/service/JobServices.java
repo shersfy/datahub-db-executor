@@ -76,8 +76,8 @@ public class JobServices {
     @Value("${job.block.progressPeriodSeconds}")
     private int progressPeriodSeconds = 10;
     
-    @Value("${job.block.cachePercent}")
-    private float cachePercent = 0.01f;
+    @Value("${job.block.cacheSize}")
+    private float cacheSize = 10; // 10M
 
     @Resource
     private LogManager logManager;
@@ -119,8 +119,7 @@ public class JobServices {
         
         // 添加到执行器
         Map<String, Object> datamap = new HashMap<>();
-        datamap.put("blcokRecords", blcokRecords);
-        datamap.put("cachePercent", cachePercent);
+        datamap.put("cacheSize", cacheSize);
         datamap.put("progressPeriodSeconds", progressPeriodSeconds);
         executor.submit(new JobBlockTask(block, jobBlockService, datamap));
     }

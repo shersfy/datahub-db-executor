@@ -13,12 +13,12 @@ spring:
 # jobs
 job:
   block:
-    threads: 100
+    threads: 100 # 处理分块最大线程数
     max: 10 # 最大块数 
     maxIndexNotExist: 1 # 没有索引时最大块数
     records: 10000 # 每块记录数
-    cachePercent: 0.1 # 块处理缓存百分比
-    progressPeriodSeconds: 10 # 汇报进度周期 
+    cacheSize: 10 # 缓存量大小, 单位兆(M)
+    progressPeriodSeconds: 10 # 汇报进度周期, 单位秒(s)
 # hystrix 必须加否则无效(默认false)
 feign: 
   hystrix:
