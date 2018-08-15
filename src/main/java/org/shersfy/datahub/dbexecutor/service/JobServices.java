@@ -101,7 +101,7 @@ public class JobServices {
      * @param blockConfig
      */
     @Async
-    public void execute(String blockPk) {
+    public void executeJobBlock(String blockPk) {
         if(StringUtils.isBlank(blockPk)) {
             return;
         }
@@ -130,7 +130,7 @@ public class JobServices {
      */
     @Async
     @Transactional(propagation=Propagation.NOT_SUPPORTED)
-    public void config(Long jobId, Long logId, String cfg) {
+    public void executeJob(Long jobId, Long logId, String cfg) {
 
         JobConfig config = JSON.parseObject(cfg, JobConfig.class);
         
@@ -218,7 +218,7 @@ public class JobServices {
         List<JobConfig> errors = new ArrayList<>();
         for(JobConfig block : blocks) {
             // 下发配置
-            String text = dhubDbExecutorClient.callExecuteJob(new JobBlockPk(parse(jobId, logId, block)).toString());
+            String text = dhubDbExecutorClient.callExecuteJobBlock(new JobBlockPk(parse(jobId, logId, block)).toString());
             Result res  = JSON.parseObject(text, Result.class);
             if(res.getCode()!=ResultCode.SUCESS) {
                 LOGGER.error("dispatch block error: {}", block);

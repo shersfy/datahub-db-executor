@@ -13,8 +13,8 @@ public interface DhubDbExecutorClient extends ServicesFeignClient{
     
     String serviceId = "datahub-db-executor";
     
-    @RequestMapping(method = RequestMethod.GET, value = "/job/execute")
+    @RequestMapping(method = RequestMethod.GET, value = "/job/block/execute")
     @ResponseBody
-    String callExecuteJob(@RequestParam("blockPk")String blockPk);
+    String callExecuteJobBlock(@RequestParam("blockPk")String blockPk);
     
 }

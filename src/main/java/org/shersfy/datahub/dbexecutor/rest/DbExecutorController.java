@@ -41,15 +41,15 @@ public class DbExecutorController extends BaseController{
         return new Result(SUCESS, "received successful");
     }
 
-    @GetMapping("/job/config")
-    public Result configJob(Long jobId, Long logId, String config) {
-        jobServices.config(jobId, logId, config);
+    @GetMapping("/job/execute")
+    public Result executeJob(Long jobId, Long logId, String config) {
+        jobServices.executeJob(jobId, logId, config);
         return new Result(SUCESS, "received successful");
     }
     
-    @GetMapping("/job/execute")
+    @GetMapping("/job/block/execute")
     public Result executeJobBlock(String blockPk) {
-        jobServices.execute(blockPk);
+        jobServices.executeJobBlock(blockPk);
         return new Result(SUCESS, "received successful");
     }
     
