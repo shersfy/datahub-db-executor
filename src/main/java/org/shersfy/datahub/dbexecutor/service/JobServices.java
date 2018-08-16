@@ -78,6 +78,9 @@ public class JobServices {
     
     @Value("${job.block.cacheSize}")
     private int cacheSize = 10; // 10M
+    
+    @Value("${job.block.repeatDispatch}")
+    private int repeatDispatch = 1;
 
     @Resource
     private LogManager logManager;
@@ -120,6 +123,7 @@ public class JobServices {
         // 添加到执行器
         Map<String, Object> datamap = new HashMap<>();
         datamap.put("cacheSize", cacheSize);
+        datamap.put("repeatDispatch", repeatDispatch);
         datamap.put("progressPeriodSeconds", progressPeriodSeconds);
         executor.submit(new JobBlockTask(block, jobBlockService, datamap));
     }
@@ -215,14 +219,19 @@ public class JobServices {
      * @param retry 重试次数
      */
     public void dispatch(Long jobId, Long logId, List<JobConfig> blocks) {
-        List<JobConfig> errors = new ArrayList<>();
-        for(JobConfig block : blocks) {
+        List<JobConfig> repeat = new ArrayList<>();
+        int cnt = repeatDispatch<1?1:repeatDispatch;
+        
+        for(int i=0; i<cnt; i++) {
+            repeat.addAll(blocks);
+        }
+        
+        for(JobConfig block : repeat) {
             // 下发配置
             String text = dhubDbExecutorClient.callExecuteJobBlock(new JobBlockPk(parse(jobId, logId, block)).toString());
             Result res  = JSON.parseObject(text, Result.class);
             if(res.getCode()!=ResultCode.SUCESS) {
                 LOGGER.error("dispatch block error: {}", block);
-                errors.add(block);
             }
         }
         

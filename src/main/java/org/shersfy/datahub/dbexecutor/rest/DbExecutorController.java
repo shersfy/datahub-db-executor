@@ -28,7 +28,7 @@ public class DbExecutorController extends BaseController{
     
     @Resource
     private JobBlockService jobBlockService;
-
+    
     @GetMapping("/")
     public Object index() {
         return "Welcom database executor application "+ version;
@@ -57,6 +57,5 @@ public class DbExecutorController extends BaseController{
     public Object listBlocks() {
         return jobBlockService.findList(new JobBlock());
     }
-   
 
 }

@@ -43,4 +43,6 @@ public interface JobBlockService extends BaseService<JobBlock, Long> {
 
     TableLockService getTableLockService();
 
+    void callUpdateLog(Long logId, int status);
+
 }

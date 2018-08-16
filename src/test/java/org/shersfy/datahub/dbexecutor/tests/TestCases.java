@@ -1,6 +1,16 @@
 package org.shersfy.datahub.dbexecutor.tests;
 
+import java.io.IOException;
+
+import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.junit.Test;
+import org.shersfy.datahub.commons.exception.DatahubException;
+import org.shersfy.datahub.commons.meta.HdfsMeta;
+import org.shersfy.datahub.dbexecutor.connector.hadoop.HdfsUtil;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 
 import com.alibaba.fastjson.JSON;
@@ -18,6 +28,32 @@ public class TestCases {
         System.out.println(obj1);
         System.out.println(obj2);
         System.out.println(obj1.equals(obj2));
+    }
+    
+    @Test
+    public void test02() throws DatahubException, IOException {
+        HdfsMeta meta = new HdfsMeta();
+        meta.setUserName("hdfs");
+        meta.setUrl("hdfs://192.168.186.129:9000");
+        
+        DistributedFileSystem fs = (DistributedFileSystem) HdfsUtil.getFileSystem(meta);
+        
+        Path path = new Path("/data/mysql/datahub_test/job_info/job_info.txt");
+        Path part = new Path("/data/mysql/datahub_test/job_log/job_log_part_0.tmp");
+        
+        fs.recoverLease(path);
+        fs.recoverLease(part);
+
+        FSDataOutputStream output = fs.append(path);
+        FSDataInputStream input   = fs.open(part);
+        IOUtils.copyLarge(input, output, new byte[1024]);
+        
+        
+        input.close();
+        output.flush();
+        output.close();
+        
+        
     }
 
 }

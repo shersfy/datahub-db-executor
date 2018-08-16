@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.shersfy.datahub.commons.beans.Result;
 import org.shersfy.datahub.commons.beans.Result.ResultCode;
@@ -116,6 +117,16 @@ public class HdfsUtil {
 			throw new DatahubException(e, "create hdfs directory error:%s", hdfsDir);
 		}
 		
+	}
+	
+	public static FSDataOutputStream append(FileSystem fs, String hdfsFile) throws IOException {
+	    DistributedFileSystem dfs = null;
+	    Path path = new Path(hdfsFile);
+	    if(fs instanceof DistributedFileSystem) {
+	        dfs = (DistributedFileSystem) fs;
+	        dfs.recoverLease(path);
+	    }
+        return fs.append(path);
 	}
 	
 	public static FSDataOutputStream createHdfsFile(FileSystem fs, final String hdfsFile, 
@@ -500,6 +511,10 @@ public class HdfsUtil {
 				break;
 			}
 			
+			conf.set("dfs.support.append", "true");
+			// IOException: Failed to replace a bad datanode on the existing pipeline due to no more good datanodes being available to try
+			conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "true");
+			conf.set("dfs.client.block.write.replace-datanode-on-failure.policy", "NEVER");
 			// 支持追加流
 			conf.set(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY, "true");
 			// 是否使用FileSystem.CACHE 共享的文件系统

@@ -20,7 +20,6 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.shersfy.datahub.commons.constant.JobConst.JobLogStatus;
 import org.shersfy.datahub.commons.constant.JobConst.JobType;
 import org.shersfy.datahub.commons.meta.ColumnMeta;
@@ -28,13 +27,12 @@ import org.shersfy.datahub.commons.meta.FieldData;
 import org.shersfy.datahub.commons.meta.HdfsMeta;
 import org.shersfy.datahub.commons.meta.TableMeta;
 import org.shersfy.datahub.commons.utils.FileUtil;
-import org.shersfy.datahub.commons.utils.FileUtil.FileSizeUnit;
-import org.shersfy.datahub.commons.utils.FunUtil;
 import org.shersfy.datahub.commons.utils.JobLogUtil;
 import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
 import org.shersfy.datahub.dbexecutor.connector.hadoop.HdfsUtil;
 import org.shersfy.datahub.dbexecutor.model.JobBlock;
+import org.shersfy.datahub.dbexecutor.model.JobBlockPk;
 import org.shersfy.datahub.dbexecutor.params.config.DataSourceConfig;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 import org.shersfy.datahub.dbexecutor.service.JobBlockService;
@@ -55,8 +53,8 @@ public class JobBlockTask implements Callable<JobBlock>{
     private Long logId = null;
     private Long blkId = null;
 
-    /**缓存量**/
-    private int cacheSize;
+    /**切片副本数量**/
+    private int repeatDispatch;
     /**进度汇报周期**/
     private int progressPeriodSeconds;
     /**临时数据**/
@@ -90,7 +88,6 @@ public class JobBlockTask implements Callable<JobBlock>{
         this.logId = block.getLogId();
         this.blkId = block.getId();
 
-        this.cacheSize = Integer.parseInt(datamap.get("cacheSize").toString());
         this.progressPeriodSeconds = Integer.parseInt(datamap.get("progressPeriodSeconds").toString());
 
     }
@@ -154,13 +151,18 @@ public class JobBlockTask implements Callable<JobBlock>{
 
     protected void after() throws Exception {
 
-        JobBlock udp = new JobBlock();
-        udp.setId(blkId);
-        udp.setJobId(jobId);
-        udp.setLogId(logId);
-        udp.setTmp(tmp);
-        udp.setStatus(JobLogStatus.Successful.index());
-        service.updateByPk(udp);
+        JobBlockPk pk = new JobBlockPk(block);
+        JobBlock old  = service.findByPk(pk);
+        // 是否已有切片副本执行完毕
+        if(old!=null && old.getStatus() != JobLogStatus.Successful.index()) {
+            JobBlock udp = new JobBlock();
+            udp.setId(blkId);
+            udp.setJobId(jobId);
+            udp.setLogId(logId);
+            udp.setTmp(tmp);
+            udp.setStatus(JobLogStatus.Successful.index());
+            service.updateByPk(udp);
+        }
 
         JobBlock where = new JobBlock();
         where.setJobId(jobId);
@@ -174,6 +176,9 @@ public class JobBlockTask implements Callable<JobBlock>{
                 method.invoke(this, blocks);
             }
 
+            // 向job manager汇报执行成功
+            service.callUpdateLog(logId, JobLogStatus.Successful.index());
+            
             int cnt = service.deleteBlocks(block);
             String msg = String.format("deleted blocks size=%s, all blocks finished", cnt);
             sendMsg(Level.INFO, msg);
@@ -286,7 +291,10 @@ public class JobBlockTask implements Callable<JobBlock>{
 
             HdfsMeta hdfs = config.getOutputHdfsParams().getHdfs();
             FileSystem fs = HdfsUtil.getFileSystem(hdfs);
+            // 副本文件名处理
+            partFilename  = HdfsUtil.renameWithNumber(fs, partFilename, repeatDispatch);
             outputStream  = HdfsUtil.createHdfsFile(fs, partFilename, hdfs.getUserName());
+            
 
             StringBuilder cache = new StringBuilder();
             String colSep = config.getOutputHdfsParams().getColumnSep();
@@ -296,11 +304,8 @@ public class JobBlockTask implements Callable<JobBlock>{
 
                 writeCnt++;
                 cache.append(line).append("\n");
-
-                if(FunUtil.calculateMemorySize(cache, FileSizeUnit.MB)>cacheSize) {
-                    flush(cache, outputStream);
-                }
-
+                flush(cache, outputStream);
+                
                 long end = System.currentTimeMillis();
                 if(end-start > progressPeriodSeconds*1000){
                     // 汇报进度
@@ -309,9 +314,7 @@ public class JobBlockTask implements Callable<JobBlock>{
                     start = end;
                 }
             }
-
-
-            flush(cache, outputStream);
+            
             progress(progresId, writeCnt);
 
             sendMsg(Level.INFO, "part "+partFilename);
@@ -338,16 +341,16 @@ public class JobBlockTask implements Callable<JobBlock>{
 
         sendMsg(Level.INFO, "merge start ...");
         FSDataOutputStream output = null;
-        DistributedFileSystem fs  = null;
+        FileSystem fs  = null;
         Path hdfsFile = new Path(getHdfsFilename());
         try {
             HdfsMeta hdfs = config.getOutputHdfsParams().getHdfs();
-            fs = (DistributedFileSystem) HdfsUtil.getFileSystem(hdfs);
+            fs = HdfsUtil.getFileSystem(hdfs);
 
             if(!HdfsUtil.exist(fs, hdfsFile.toUri().getPath())) {
                 output = HdfsUtil.createHdfsFile(fs, hdfsFile.toUri().getPath(), hdfs.getAppUser(), false);
             } else {
-                output = fs.append(hdfsFile);
+                output = HdfsUtil.append(fs, hdfsFile.toUri().getPath());
             }
 
             for(JobBlock blk :blocks) {
@@ -373,13 +376,6 @@ public class JobBlockTask implements Callable<JobBlock>{
             sendMsg(Level.ERROR, "merge hdfs part files error");
             sendMsg(Level.ERROR, ex.getMessage());
         } finally {
-            if(fs!=null) {
-                try {
-                    fs.recoverLease(hdfsFile);
-                } catch (IllegalArgumentException | IOException ex) {
-                    LOGGER.error("", ex);
-                }
-            }
             IOUtils.closeQuietly(output);
         }
     }
@@ -406,7 +402,7 @@ public class JobBlockTask implements Callable<JobBlock>{
             FieldData field = new FieldData(rs.getObject(header.get(i).getName()));
             field.setName(header.get(i).getName());
             connector.formatFieldData(conn, header.get(i), field);
-            line.append(field);
+            line.append(field.getValue());
             if(i != header.size()-1) {
                 line.append(columnSep);
             }
