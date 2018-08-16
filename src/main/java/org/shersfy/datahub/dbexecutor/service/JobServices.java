@@ -226,6 +226,9 @@ public class JobServices {
             repeat.addAll(blocks);
         }
         
+        repeat.sort((o1, o2)->o1.getInputParams().getBlock()
+            .getIndex()-o2.getInputParams().getBlock().getIndex());
+        
         for(JobConfig block : repeat) {
             // 下发配置
             String text = dhubDbExecutorClient.callExecuteJobBlock(new JobBlockPk(parse(jobId, logId, block)).toString());
@@ -560,6 +563,11 @@ public class JobServices {
         }
 
         return obj;
+    }
+
+
+    public ExecutorService getExecutor() {
+        return executor;
     }
 
 }

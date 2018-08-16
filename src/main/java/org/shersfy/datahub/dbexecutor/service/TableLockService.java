@@ -8,29 +8,27 @@ public interface TableLockService extends BaseService<TableLock, TableLockKey> {
     /**
      * 锁表
      * @param tableName 表名
-     * @param service 操作服务标识
      * @return true成功，false失败
      */
-    boolean lock(String tableName, String service);
+    boolean lock(String tableName);
     
     /**
      * 锁记录
      * @param tableName 表名
      * @param recordPk 记录主键
-     * @param service 操作服务标识
      * @return true成功，false失败
      */
-    boolean lock(String tableName, String recordPk, String service);
+    boolean lock(String tableName, String recordPk);
     
     /**
-     * 释放表锁
+     * 释放表锁，谁加锁谁解锁原则
      * @param tableName 表名
      * @return true成功，false失败
      */
     boolean unlock(String tableName);
 
     /**
-     * 释放记录锁
+     * 释放记录锁，谁加锁谁解锁原则
      * @param tableName 表名
      * @param recordPk 记录主键
      * @return true成功，false失败

@@ -1035,44 +1035,54 @@ public class HdfsUtil {
 		}
 	}
 	
+	public synchronized static String renameWithNanotime(FileSystem fs, String fileName, int maxNumber) 
+        throws DatahubException {
+        return renameWithNumber(fs, fileName, maxNumber, true);
+    }
 	
 	public synchronized static String renameWithNumber(FileSystem fs, String fileName, int maxNumber) 
 			throws DatahubException {
-		
-		try {
-			
-			if(fs == null || fileName == null){
-				return fileName;
-			}
-			
-			maxNumber = maxNumber<1?1:maxNumber;
-			String fullPath = FilenameUtils.getFullPath(fileName);
-			String baseName = FilenameUtils.getBaseName(fileName);
-			String ext = FilenameUtils.getExtension(fileName);
-			
-			StringBuffer tmp = new StringBuffer(0);
-			int cnt = 1;
-			while(cnt<=maxNumber){
-				
-				tmp.setLength(0);
-				tmp.append(baseName);
-				tmp.append("_").append(cnt);
-				tmp.append(StringUtils.isNotBlank(ext)?"."+ext:ext);
-				
-				Path path = new Path(FileUtil.concat(fullPath, tmp.toString()));
-				if(cnt == maxNumber || !fs.exists(path)){
-					fileName = path.toString().replace(File.separatorChar, '/');
-					break;
-				}
-				cnt ++;
-			}
-			
-			return fileName;
-			
-		} catch (Throwable e) {
-			throw new DatahubException(e, "hdfs file rename error: %s", fileName);
-		}
+	    return renameWithNumber(fs, fileName, maxNumber, false);
 	}
+	
+	public synchronized static String renameWithNumber(FileSystem fs, String fileName, int maxNumber, boolean nanotime) 
+	    throws DatahubException {
+	    
+	    try {
+	        
+	        if(fs == null || fileName == null){
+	            return fileName;
+	        }
+	        
+	        maxNumber = maxNumber<1?1:maxNumber;
+	        String fullPath = FilenameUtils.getFullPath(fileName);
+	        String baseName = FilenameUtils.getBaseName(fileName);
+	        String ext = FilenameUtils.getExtension(fileName);
+	        
+	        StringBuffer tmp = new StringBuffer(0);
+	        int cnt = 1;
+	        while(cnt<=maxNumber){
+	            
+	            tmp.setLength(0);
+	            tmp.append(baseName);
+	            tmp.append("_").append(nanotime?System.nanoTime():cnt);
+	            tmp.append(StringUtils.isNotBlank(ext)?"."+ext:ext);
+	            
+	            Path path = new Path(FileUtil.concat(fullPath, tmp.toString()));
+	            if(cnt == maxNumber || !fs.exists(path)){
+	                fileName = path.toString().replace(File.separatorChar, '/');
+	                break;
+	            }
+	            cnt ++;
+	        }
+	        
+	        return fileName;
+	        
+	    } catch (Throwable e) {
+	        throw new DatahubException(e, "hdfs file rename error: %s", fileName);
+	    }
+	}
+	
 	
 	private static String getFilePath(String[] paths) {
 		String filePath = null;

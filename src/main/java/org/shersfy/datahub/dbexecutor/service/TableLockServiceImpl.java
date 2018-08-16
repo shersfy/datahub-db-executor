@@ -34,13 +34,15 @@ implements TableLockService{
     }
 
     @Override
-    public boolean lock(String tableName, String service) {
-        return lock(tableName, StringUtils.EMPTY, service);
+    public boolean lock(String tableName) {
+        return lock(tableName, StringUtils.EMPTY);
     }
     
     @Override
-    public boolean lock(String tableName, String recordPk, String service) {
+    public boolean lock(String tableName, String recordPk) {
 
+        boolean locked = true;
+        
         TableLockKey id = new TableLockKey();
         id.setTableName(tableName);
         id.setRecordPk(recordPk);
@@ -48,31 +50,35 @@ implements TableLockService{
         TableLock lock = new TableLock();
         lock.setTableName(id.getTableName());
         lock.setRecordPk(id.getRecordPk());
-        lock.setService(service);
+        lock.setService(JobServices.SERVICE_NAME);
         lock.setLockTime(new Date());
 
         
         try {
-            int cnt = 0;
             TableLock old = findById(id);
             if(old == null) {
-                cnt = insert(lock);
+                locked = insert(lock)==1;
                 
             } else {
                 
                 // timeout
                 long time = lock.getLockTime().getTime() - old.getLockTime().getTime();
                 if(time > tableTimeoutSeconds*1000) {
-                    cnt = updateById(lock);
+                    locked = updateById(lock) == 1;
+                } else {
+                    locked = false;
                 }
             }
             
-            return cnt==1;
-
         } catch (Exception e) {
-            return false;
+            locked = false;
+        }
+        
+        if(locked) {
+            LOGGER.info("locked table '{}', record id '{}'", tableName, recordPk);
         }
 
+        return locked;
     }
 
     @Override
@@ -83,21 +89,36 @@ implements TableLockService{
     @Override
     public boolean unlock(String tableName, String recordPk) {
         
+        boolean unlocked = true;
+        
         TableLockKey id = new TableLockKey();
         id.setTableName(tableName);
         id.setRecordPk(recordPk);
         
-        int cnt = 0;
         try {
-            cnt = deleteById(id);
-            if(cnt==1) {
+            
+            TableLock old = findById(id);
+            if(old==null) {
                 return true;
             }
+            
+            if(old.getService() != null 
+                && !old.getService().equals(JobServices.SERVICE_NAME)) {
+                return false;
+            }
+            
+            unlocked = deleteById(id)==1;
+
         } catch (Exception e) {
             // ignore
+            unlocked = false;
         }
 
-        return findById(id)==null;
+        if(unlocked) {
+            LOGGER.info("unlocked table '{}', record id '{}'", tableName, recordPk);
+        }
+        
+        return unlocked;
     }
 
 }

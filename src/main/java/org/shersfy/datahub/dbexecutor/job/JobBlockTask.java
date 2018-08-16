@@ -169,7 +169,7 @@ public class JobBlockTask implements Callable<JobBlock>{
         where.setLogId(logId);
         List<JobBlock> blocks = service.findList(where);
         if(service.isFinished(blocks) 
-            && lockService.lock("job_block", logId.toString(), JobServices.SERVICE_NAME)) {
+            && lockService.lock("job_block", logId.toString())) {
             // 所有切片完成执行方法, 必须包含一个参数blocks
             while(finishedMethods.listIterator().hasNext()) {
                 Method method = finishedMethods.poll();
@@ -192,6 +192,8 @@ public class JobBlockTask implements Callable<JobBlock>{
         sendMsg(Level.ERROR, "execute job block error");
         sendMsg(Level.ERROR, ex.getMessage());
         LOGGER.error("", ex);
+        // 向job manager汇报执行成功
+        service.callUpdateLog(logId, JobLogStatus.Failed.index());
     }
 
     protected void finallyDo() {
@@ -213,8 +215,9 @@ public class JobBlockTask implements Callable<JobBlock>{
     }
 
 
-    /**写hdfs**/
-    protected void writeToHdfs() {
+    /**写hdfs
+     * @throws Exception **/
+    protected void writeToHdfs() throws Exception {
 
         DataSourceConfig ds = config.getInputParams().getDataSource();
 
@@ -292,7 +295,9 @@ public class JobBlockTask implements Callable<JobBlock>{
             HdfsMeta hdfs = config.getOutputHdfsParams().getHdfs();
             FileSystem fs = HdfsUtil.getFileSystem(hdfs);
             // 副本文件名处理
-            partFilename  = HdfsUtil.renameWithNumber(fs, partFilename, repeatDispatch);
+            if(HdfsUtil.exist(fs, partFilename)) {
+                partFilename  = HdfsUtil.renameWithNanotime(fs, partFilename, repeatDispatch);
+            }
             outputStream  = HdfsUtil.createHdfsFile(fs, partFilename, hdfs.getUserName());
             
 
@@ -317,17 +322,15 @@ public class JobBlockTask implements Callable<JobBlock>{
             
             progress(progresId, writeCnt);
 
-            sendMsg(Level.INFO, "part "+partFilename);
+            sendMsg(Level.INFO, "hdfs block file "+partFilename);
             tmp = partFilename;
             
             String name = "mergeHdfsParts";
             finishedMethods.add(this.getClass().getDeclaredMethod(name, List.class));
 
         } catch (Exception ex) {
-            LOGGER.error("", ex);
             sendMsg(Level.ERROR, "write block to hdfs error");
-            sendMsg(Level.ERROR, ex.getMessage());
-
+            throw ex;
         } finally {
             if(connector!=null) {
                 connector.close(rs, pstmt, conn);
@@ -336,8 +339,9 @@ public class JobBlockTask implements Callable<JobBlock>{
         }
     }
 
-    /**合并分块文件**/
-    protected void mergeHdfsParts(List<JobBlock> blocks) {
+    /**合并分块文件
+     * @throws Exception **/
+    protected void mergeHdfsParts(List<JobBlock> blocks) throws Exception {
 
         sendMsg(Level.INFO, "merge start ...");
         FSDataOutputStream output = null;
@@ -357,13 +361,19 @@ public class JobBlockTask implements Callable<JobBlock>{
                 if(StringUtils.isBlank(blk.getTmp())) {
                     continue;
                 }
+                
                 FSDataInputStream input = fs.open(new Path(blk.getTmp()));
-                IOUtils.copyLarge(fs.open(new Path(blk.getTmp())), output, new byte[1024]);
+                long size = IOUtils.copyLarge(input, output, new byte[1024]);
                 output.flush();
                 IOUtils.closeQuietly(input);
-                String msg = String.format("append: %s --> %s", blk.getTmp(), hdfsFile.toUri().getPath());
+                
+                String msg = String.format("append size {}, block file %s --> %s", FileUtil.getLengthWithUnit(size),
+                    blk.getTmp(), hdfsFile.toUri().getPath());
                 sendMsg(Level.INFO, msg);
-                HdfsUtil.deleteFile(blk.getTmp(), fs);
+                
+                if(HdfsUtil.deleteFile(blk.getTmp(), fs)) {
+                    sendMsg(Level.INFO, "deleted block file "+blk.getTmp());
+                }
             }
             
             String msg = String.format("hdfs file %s, size %s", hdfsFile.toUri().getPath(), 
@@ -373,8 +383,9 @@ public class JobBlockTask implements Callable<JobBlock>{
             
         } catch (Exception ex) {
             LOGGER.error("", ex);
-            sendMsg(Level.ERROR, "merge hdfs part files error");
+            sendMsg(Level.ERROR, "merge hdfs block files error");
             sendMsg(Level.ERROR, ex.getMessage());
+            throw ex;
         } finally {
             IOUtils.closeQuietly(output);
         }
