@@ -72,6 +72,8 @@ public class JobBlockTask implements Callable<JobBlock>{
 
     private LinkedList<Method> finishedMethods;
     
+    private Method completedReplicationMethod;
+    
     public JobBlockTask() {}
 
     public JobBlockTask(JobBlock block, JobBlockService service, Map<String, Object> datamap) {
@@ -84,9 +86,9 @@ public class JobBlockTask implements Callable<JobBlock>{
         this.lockService = service.getTableLockService();
         this.finishedMethods = new LinkedList<>();
 
-        this.jobId = block.getJobId();
-        this.logId = block.getLogId();
         this.blkId = block.getId();
+        this.logId = block.getLogId();
+        this.jobId = block.getJobId();
 
         this.progressPeriodSeconds = Integer.parseInt(datamap.get("progressPeriodSeconds").toString());
 
@@ -151,24 +153,24 @@ public class JobBlockTask implements Callable<JobBlock>{
 
     protected void after() throws Exception {
 
-        JobBlockPk pk = new JobBlockPk(block);
-        JobBlock old  = service.findByPk(pk);
-        // 是否已有切片副本执行完毕
-        if(old!=null && old.getStatus() != JobLogStatus.Successful.index()) {
-            JobBlock udp = new JobBlock();
-            udp.setId(blkId);
-            udp.setJobId(jobId);
-            udp.setLogId(logId);
-            udp.setTmp(tmp);
-            udp.setStatus(JobLogStatus.Successful.index());
-            service.updateByPk(udp);
+        if(hasCompletedReplication()) {
+            // 已有副本完成
+            return;
         }
+
+        JobBlock udp = new JobBlock();
+        udp.setId(blkId);
+        udp.setJobId(jobId);
+        udp.setLogId(logId);
+        udp.setTmp(tmp);
+        udp.setStatus(JobLogStatus.Successful.index());
+        service.updateByPk(udp);
 
         JobBlock where = new JobBlock();
         where.setJobId(jobId);
         where.setLogId(logId);
         List<JobBlock> blocks = service.findList(where);
-        if(service.isFinished(blocks) 
+        if(service.isFinished(blocks)
             && lockService.lock("job_block", logId.toString())) {
             // 所有切片完成执行方法, 必须包含一个参数blocks
             while(finishedMethods.listIterator().hasNext()) {
@@ -178,7 +180,7 @@ public class JobBlockTask implements Callable<JobBlock>{
 
             // 向job manager汇报执行成功
             service.callUpdateLog(logId, JobLogStatus.Successful.index());
-            
+
             int cnt = service.deleteBlocks(block);
             String msg = String.format("deleted blocks size=%s, all blocks finished", cnt);
             sendMsg(Level.INFO, msg);
@@ -189,6 +191,11 @@ public class JobBlockTask implements Callable<JobBlock>{
     }
 
     protected void exception(Throwable ex) {
+        if(hasCompletedReplication()) {
+            // ignore
+            LOGGER.warn("execute job block error, but has completed replication");
+            return ;
+        }
         sendMsg(Level.ERROR, "execute job block error");
         sendMsg(Level.ERROR, ex.getMessage());
         LOGGER.error("", ex);
@@ -214,6 +221,21 @@ public class JobBlockTask implements Callable<JobBlock>{
         sendMsg(Level.INFO, progress);
     }
 
+    /**是否有完成的切片副本**/
+    protected boolean hasCompletedReplication() {
+        JobBlockPk pk = new JobBlockPk(block);
+        JobBlock old  = service.findByPk(pk);
+        // 是否已有副本执行完毕
+        boolean completed = old==null || old.getStatus()==JobLogStatus.Executing.index();
+        if(completed && completedReplicationMethod!=null) {
+            try {
+                completedReplicationMethod.invoke(this);
+            } catch (Exception e) {
+                LOGGER.error("", e);
+            }
+        }
+        return completed;
+    }
 
     /**写hdfs
      * @throws Exception **/
@@ -325,8 +347,8 @@ public class JobBlockTask implements Callable<JobBlock>{
             sendMsg(Level.INFO, "hdfs block file "+partFilename);
             tmp = partFilename;
             
-            String name = "mergeHdfsParts";
-            finishedMethods.add(this.getClass().getDeclaredMethod(name, List.class));
+            finishedMethods.add(this.getClass().getDeclaredMethod("mergeHdfsParts", List.class));
+            completedReplicationMethod = this.getClass().getDeclaredMethod("completedReplicationHdfs");
 
         } catch (Exception ex) {
             sendMsg(Level.ERROR, "write block to hdfs error");
@@ -367,7 +389,7 @@ public class JobBlockTask implements Callable<JobBlock>{
                 output.flush();
                 IOUtils.closeQuietly(input);
                 
-                String msg = String.format("append size {}, block file %s --> %s", FileUtil.getLengthWithUnit(size),
+                String msg = String.format("append size %s, block file %s --> %s", FileUtil.getLengthWithUnit(size),
                     blk.getTmp(), hdfsFile.toUri().getPath());
                 sendMsg(Level.INFO, msg);
                 
@@ -388,6 +410,17 @@ public class JobBlockTask implements Callable<JobBlock>{
             throw ex;
         } finally {
             IOUtils.closeQuietly(output);
+        }
+    }
+    
+    protected void completedReplicationHdfs() {
+        try {
+            FileSystem fs = HdfsUtil.getFileSystem(config.getOutputHdfsParams().getHdfs());
+            if(HdfsUtil.deleteFile(tmp, fs)) {
+                sendMsg(Level.INFO, "delete replication block "+tmp);
+            }
+        } catch (Exception e) {
+            LOGGER.error("", e);
         }
     }
 
