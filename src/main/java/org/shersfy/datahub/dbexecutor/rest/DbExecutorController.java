@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -29,9 +30,11 @@ public class DbExecutorController extends BaseController{
     @Resource
     private JobBlockService jobBlockService;
     
-    @GetMapping("/")
-    public Object index() {
-        return "Welcom database executor application "+ version;
+    @RequestMapping("/")
+    public String index() {
+        String content = String.format("Welcom database executor application %s. Session id %s", 
+            version, getRequest().getSession().getId());
+        return content;
     }
     
     
