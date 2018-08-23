@@ -1,9 +1,9 @@
 package org.shersfy.datahub.dbexecutor.params.config;
 
+import org.shersfy.datahub.commons.connector.db.DbConnectorInterface;
 import org.shersfy.datahub.commons.exception.DatahubException;
 import org.shersfy.datahub.commons.meta.BaseMeta;
 import org.shersfy.datahub.commons.meta.DBMeta;
-import org.shersfy.datahub.dbexecutor.connector.db.DbConnectorInterface;
 
 public class DataSourceConfig extends BaseMeta{
 

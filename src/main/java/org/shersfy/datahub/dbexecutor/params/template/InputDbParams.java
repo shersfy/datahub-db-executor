@@ -1,8 +1,8 @@
 package org.shersfy.datahub.dbexecutor.params.template;
 
+import org.shersfy.datahub.commons.connector.db.TablePartition;
 import org.shersfy.datahub.commons.meta.BaseMeta;
 import org.shersfy.datahub.commons.meta.TableMeta;
-import org.shersfy.datahub.dbexecutor.connector.db.TablePartition;
 import org.shersfy.datahub.dbexecutor.params.config.DataSourceConfig;
 
 public class InputDbParams extends BaseMeta {

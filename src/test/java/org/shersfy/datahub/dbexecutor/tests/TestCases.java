@@ -8,9 +8,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.junit.Test;
+import org.shersfy.datahub.commons.connector.hadoop.HdfsUtil;
 import org.shersfy.datahub.commons.exception.DatahubException;
 import org.shersfy.datahub.commons.meta.HdfsMeta;
-import org.shersfy.datahub.dbexecutor.connector.hadoop.HdfsUtil;
 import org.shersfy.datahub.dbexecutor.params.config.JobConfig;
 
 import com.alibaba.fastjson.JSON;
